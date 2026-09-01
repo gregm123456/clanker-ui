@@ -52,6 +52,6 @@ fov = 65.0
 [node name="SpinningCube" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_1")
 script = ExtResource("1_cube_script")
-tumble_speed = Vector3(1.2, 1.8, 0.9)
+tumble_speed = Vector3(0.12, 0.18, 0.09)
 move_velocity = Vector2(2.2, 1.4)
 wrap_margin = 1.8
