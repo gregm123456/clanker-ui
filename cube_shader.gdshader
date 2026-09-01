@@ -89,8 +89,8 @@ void fragment() {
 		// Face 1: Image face (Front +Z)
 		vec4 tex = texture(front_texture, face_uv);
 		base_color = mix(front_face_bg.rgb, tex.rgb, tex.a);
-	} else if (face_id == 1) {
-		// Face 2: Live Webcam face (Right +X)
+	} else {
+		// Faces 1 through 5: Live Webcam feed on all other 5 faces
 		vec2 cam_uv = face_uv;
 		bool in_bounds = true;
 
