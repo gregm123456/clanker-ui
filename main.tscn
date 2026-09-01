@@ -46,7 +46,7 @@ light_color = Color(0.4, 0.6, 0.9, 1)
 light_energy = 0.6
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 fov = 65.0
 
 [node name="SpinningCube" type="MeshInstance3D" parent="."]
