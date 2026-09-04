@@ -115,6 +115,8 @@ func _activate_feed() -> void:
 			feed.set_active(true)
 			if feed.is_active():
 				target_feed = feed
+			else:
+				feed.set_active(false)
 
 	# Fallback: find any functional feed (supports V4L2 USB cameras on Linux / Raspberry Pi)
 	if target_feed == null:
