@@ -1,3 +1,10 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Exported binaries/artifacts (build locally per target, don't commit)
+clankerUI.arm64
+clankerUI.pck
+clankerUI.sh
+clankerUI.x86_64
+export_presets.cfg
