@@ -120,10 +120,11 @@ func _activate_feed() -> void:
 	if target_feed == null:
 		for f in feeds:
 			if f != null:
-				f.set_active(true)
-				if f.is_active():
+				if f.set_active(true) and f.is_active():
 					target_feed = f
 					break
+				else:
+					f.set_active(false)
 
 	if target_feed == null:
 		return
