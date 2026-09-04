@@ -101,6 +101,13 @@ func _on_camera_feed_event(_arg = null) -> void:
 	if current_feed == null or not current_feed.is_active():
 		_activate_feed()
 
+func _select_feed_format(feed: CameraFeed) -> void:
+	# V4L2 (Linux / Raspberry Pi) requires an explicit format before activation,
+	# unlike macOS/iOS which auto-select one.
+	var formats := feed.get_formats()
+	if not formats.is_empty():
+		feed.set_format(0, {})
+
 func _activate_feed() -> void:
 	var feeds := CameraServer.feeds()
 	if feeds.is_empty():
@@ -112,6 +119,7 @@ func _activate_feed() -> void:
 	if webcam_feed_index >= 0 and webcam_feed_index < feeds.size():
 		var feed := feeds[webcam_feed_index]
 		if feed != null:
+			_select_feed_format(feed)
 			feed.set_active(true)
 			if feed.is_active():
 				target_feed = feed
@@ -122,6 +130,7 @@ func _activate_feed() -> void:
 	if target_feed == null:
 		for f in feeds:
 			if f != null:
+				_select_feed_format(f)
 				f.set_active(true)
 				if f.is_active():
 					target_feed = f

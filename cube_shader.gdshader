@@ -21,11 +21,9 @@ uniform float metallic : hint_range(0.0, 1.0) = 0.15;
 uniform vec3 cube_size = vec3(1.8, 1.8, 1.8);
 
 varying vec3 v_local_pos;
-varying vec3 v_local_norm;
 
 void vertex() {
 	v_local_pos = VERTEX;
-	v_local_norm = NORMAL;
 }
 
 // Convert YCbCr (macOS AVFoundation bi-planar) to standard RGB
@@ -40,14 +38,16 @@ vec3 ycbcr_to_rgb(float y, vec2 cbcr) {
 }
 
 void fragment() {
-	vec3 abs_norm = abs(v_local_norm);
+	// Derive face normal from local position on the box (avoids a second varying).
+	vec3 local_norm = v_local_pos / (cube_size * 0.5);
+	vec3 abs_norm = abs(local_norm);
 	vec2 face_uv = vec2(0.5);
 
 	// Determine face: 0: Front (+Z), 1: Right (+X), 2: Back (-Z), 3: Left (-X), 4: Top (+Y), 5: Bottom (-Y)
 	int face_id = 0;
 
 	if (abs_norm.z >= abs_norm.x && abs_norm.z >= abs_norm.y) {
-		if (v_local_norm.z > 0.0) {
+		if (local_norm.z > 0.0) {
 			// Front (+Z)
 			face_id = 0;
 			face_uv = vec2(v_local_pos.x / cube_size.x + 0.5, 0.5 - v_local_pos.y / cube_size.y);
@@ -57,7 +57,7 @@ void fragment() {
 			face_uv = vec2(0.5 - v_local_pos.x / cube_size.x, 0.5 - v_local_pos.y / cube_size.y);
 		}
 	} else if (abs_norm.x >= abs_norm.y && abs_norm.x >= abs_norm.z) {
-		if (v_local_norm.x > 0.0) {
+		if (local_norm.x > 0.0) {
 			// Right (+X)
 			face_id = 1;
 			face_uv = vec2(0.5 - v_local_pos.z / cube_size.z, 0.5 - v_local_pos.y / cube_size.y);
@@ -67,7 +67,7 @@ void fragment() {
 			face_uv = vec2(v_local_pos.z / cube_size.z + 0.5, 0.5 - v_local_pos.y / cube_size.y);
 		}
 	} else {
-		if (v_local_norm.y > 0.0) {
+		if (local_norm.y > 0.0) {
 			// Top (+Y)
 			face_id = 4;
 			face_uv = vec2(v_local_pos.x / cube_size.x + 0.5, 0.5 - v_local_pos.z / cube_size.z);
