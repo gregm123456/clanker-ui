@@ -27,6 +27,9 @@ extends MeshInstance3D
 ## Flip webcam horizontally (mirror / selfie view)
 @export var flip_webcam_horizontal: bool = true
 
+## Automatically start in full screen mode (ideal for Raspberry Pi / standalone displays)
+@export var start_fullscreen: bool = true
+
 @onready var camera: Camera3D = get_viewport().get_camera_3d()
 
 var webcam_y_texture: CameraTexture
@@ -34,17 +37,40 @@ var webcam_cbcr_texture: CameraTexture
 var current_feed: CameraFeed
 var _mat: ShaderMaterial
 var _feed_retry_timer: float = 0.0
-var _aspect_detected: bool = false
+var _last_webcam_aspect: float = -1.0
 var _last_datatype: int = -1
 
 func _ready() -> void:
+	if start_fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
 	_setup_material()
 
 	if camera == null:
 		get_tree().process_frame.connect(_find_camera, CONNECT_ONE_SHOT)
 
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_on_viewport_size_changed):
+		vp.size_changed.connect(_on_viewport_size_changed)
+
 	if enable_webcam:
 		_setup_webcam()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.is_pressed() and not event.is_echo():
+		var k := event as InputEventKey
+		if k.keycode == KEY_ESCAPE:
+			get_tree().quit()
+		elif k.keycode == KEY_F11 or (k.keycode == KEY_ENTER and k.alt_pressed):
+			var current_mode := DisplayServer.window_get_mode()
+			if current_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or current_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			else:
+				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+func _on_viewport_size_changed() -> void:
+	if enable_wraparound:
+		_handle_screen_wraparound()
 
 func _setup_material() -> void:
 	var base_mat := get_active_material(0)
@@ -80,28 +106,44 @@ func _activate_feed() -> void:
 	if feeds.is_empty():
 		return
 
-	var idx := clampi(webcam_feed_index, 0, feeds.size() - 1)
-	var feed := feeds[idx]
-	if feed == null:
+	var target_feed: CameraFeed = null
+
+	# Try configured feed index first
+	if webcam_feed_index >= 0 and webcam_feed_index < feeds.size():
+		var feed := feeds[webcam_feed_index]
+		if feed != null:
+			feed.set_active(true)
+			if feed.is_active():
+				target_feed = feed
+
+	# Fallback: find any functional feed (supports V4L2 USB cameras on Linux / Raspberry Pi)
+	if target_feed == null:
+		for f in feeds:
+			if f != null:
+				f.set_active(true)
+				if f.is_active():
+					target_feed = f
+					break
+
+	if target_feed == null:
 		return
 
-	current_feed = feed
-	feed.set_active(true)
+	current_feed = target_feed
 
-	if not feed.format_changed.is_connected(_update_feed_mode):
-		feed.format_changed.connect(_update_feed_mode)
+	if not current_feed.format_changed.is_connected(_update_feed_mode):
+		current_feed.format_changed.connect(_update_feed_mode)
 
 	# Setup Y / Luminance / Primary Texture
 	if webcam_y_texture == null:
 		webcam_y_texture = CameraTexture.new()
-	webcam_y_texture.camera_feed_id = feed.get_id()
+	webcam_y_texture.camera_feed_id = current_feed.get_id()
 	webcam_y_texture.which_feed = CameraServer.FEED_Y_IMAGE
 	webcam_y_texture.camera_is_active = true
 
 	# Setup CbCr / Chroma Texture (for macOS / iOS YCbCr Bi-Planar)
 	if webcam_cbcr_texture == null:
 		webcam_cbcr_texture = CameraTexture.new()
-	webcam_cbcr_texture.camera_feed_id = feed.get_id()
+	webcam_cbcr_texture.camera_feed_id = current_feed.get_id()
 	webcam_cbcr_texture.which_feed = CameraServer.FEED_CBCR_IMAGE
 	webcam_cbcr_texture.camera_is_active = true
 
@@ -124,7 +166,7 @@ func _update_feed_mode() -> void:
 	elif datatype == CameraFeed.FEED_RGB:
 		_mat.set_shader_parameter("webcam_mode", 1) # Standard RGB
 	else:
-		# Fallback: on macOS/iOS, camera default is YCbCr bi-planar
+		# Fallback: on macOS/iOS default is YCbCr bi-planar; on Linux (V4L2) default is RGB
 		if OS.get_name() in ["macOS", "iOS"]:
 			_mat.set_shader_parameter("webcam_mode", 2)
 		else:
@@ -141,14 +183,15 @@ func _process(delta: float) -> void:
 		elif current_feed != null and current_feed.get_datatype() != _last_datatype:
 			_update_feed_mode()
 
-	# Dynamically detect camera aspect ratio once texture is loaded
-	if not _aspect_detected and webcam_y_texture != null and _mat != null:
+	# Dynamically update camera aspect ratio whenever USB webcam texture size changes
+	if webcam_y_texture != null and _mat != null:
 		var tw := float(webcam_y_texture.get_width())
 		var th := float(webcam_y_texture.get_height())
 		if tw > 0.0 and th > 0.0:
 			var aspect := tw / th
-			_mat.set_shader_parameter("webcam_aspect", aspect)
-			_aspect_detected = true
+			if absf(aspect - _last_webcam_aspect) > 0.001:
+				_last_webcam_aspect = aspect
+				_mat.set_shader_parameter("webcam_aspect", aspect)
 
 	# 1. Continuous tumbling / spinning rotation
 	rotate_x(tumble_speed.x * delta)
@@ -179,13 +222,22 @@ func _handle_screen_wraparound() -> void:
 	var z_dist := absf(cam_pos.z - global_position.z)
 
 	var half_h: float
+	var half_w: float
 	if camera.projection == Camera3D.PROJECTION_PERSPECTIVE:
 		var fov_rad := deg_to_rad(camera.fov)
-		half_h = tan(fov_rad * 0.5) * z_dist
+		if camera.keep_aspect == Camera3D.KEEP_WIDTH:
+			half_w = tan(fov_rad * 0.5) * z_dist
+			half_h = half_w / aspect
+		else:
+			half_h = tan(fov_rad * 0.5) * z_dist
+			half_w = half_h * aspect
 	else:
-		half_h = camera.size * 0.5
-
-	var half_w := half_h * aspect
+		if camera.keep_aspect == Camera3D.KEEP_WIDTH:
+			half_w = camera.size * 0.5
+			half_h = half_w / aspect
+		else:
+			half_h = camera.size * 0.5
+			half_w = half_h * aspect
 
 	var bound_x := half_w + wrap_margin
 	var bound_y := half_h + wrap_margin
