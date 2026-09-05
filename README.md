@@ -9,6 +9,7 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
 - **USB Camera Support**: Automatically detects and displays live video feeds from standard USB cameras connected via Video4Linux2 (V4L2) on Linux / Raspberry Pi, as well as native feeds on macOS/Windows/iOS.
 - **Controls**:
   - `F11` or `Alt + Enter`: Toggle Full Screen / Windowed mode.
+  - `M`: Toggle mouse pointer visibility.
   - `Escape`: Quit application.
 
 ## Run

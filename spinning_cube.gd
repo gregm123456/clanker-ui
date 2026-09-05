@@ -30,6 +30,9 @@ extends MeshInstance3D
 ## Automatically start in full screen mode (ideal for Raspberry Pi / standalone displays)
 @export var start_fullscreen: bool = true
 
+## Automatically hide mouse cursor (ideal for kiosk / fullscreen runs)
+@export var hide_mouse_cursor: bool = true
+
 @onready var camera: Camera3D = get_viewport().get_camera_3d()
 
 var webcam_y_texture: CameraTexture
@@ -44,6 +47,9 @@ var _last_datatype: int = -1
 func _ready() -> void:
 	if start_fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+	if hide_mouse_cursor:
+		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 
 	_setup_material()
 
@@ -66,8 +72,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			var current_mode := DisplayServer.window_get_mode()
 			if current_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or current_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
 				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+				if hide_mouse_cursor:
+					Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			else:
 				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+				if hide_mouse_cursor:
+					Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+		elif k.keycode == KEY_M:
+			if Input.mouse_mode == Input.MOUSE_MODE_HIDDEN:
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			else:
+				Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 
 func _on_viewport_size_changed() -> void:
 	if enable_wraparound:
