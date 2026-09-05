@@ -35,6 +35,7 @@ extends MeshInstance3D
 var webcam_y_texture: CameraTexture
 var webcam_cbcr_texture: CameraTexture
 var current_feed: CameraFeed
+var _feed_last_attempt: Dictionary = {}
 var _mat: ShaderMaterial
 var _feed_retry_timer: float = 0.0
 var _last_webcam_aspect: float = -1.0
@@ -119,6 +120,7 @@ func _select_feed_format(feed: CameraFeed) -> void:
 		if pixels > 0 and (best_pixels < 0 or pixels < best_pixels):
 			best_pixels = pixels
 			best_index = i
+	print("[webcam] feed '", feed.get_name(), "' (id=", feed.get_id(), ") selecting format[", best_index, "] = ", formats[best_index])
 	feed.set_format(best_index, {})
 
 func _activate_feed() -> void:
@@ -126,30 +128,35 @@ func _activate_feed() -> void:
 	if feeds.is_empty():
 		return
 
-	var target_feed: CameraFeed = null
-
-	# Try configured feed index first
+	var now := Time.get_ticks_msec()
+	var candidates: Array = []
 	if webcam_feed_index >= 0 and webcam_feed_index < feeds.size():
-		var feed := feeds[webcam_feed_index]
-		if feed != null:
-			_select_feed_format(feed)
-			feed.set_active(true)
-			if feed.is_active():
-				target_feed = feed
-			else:
-				feed.set_active(false)
+		candidates.append(feeds[webcam_feed_index])
+	for f in feeds:
+		if f != null and not candidates.has(f):
+			candidates.append(f)
 
-	# Fallback: find any functional feed (supports V4L2 USB cameras on Linux / Raspberry Pi)
-	if target_feed == null:
-		for f in feeds:
-			if f != null:
-				_select_feed_format(f)
-				f.set_active(true)
-				if f.is_active():
-					target_feed = f
-					break
-				else:
-					f.set_active(false)
+	var target_feed: CameraFeed = null
+	for f in candidates:
+		if f == null:
+			continue
+		if f.is_active():
+			target_feed = f
+			break
+		# Skip feeds that failed recently to avoid hammering the device with
+		# repeated set_format/set_active calls every retry tick.
+		var fid := f.get_id()
+		var last: int = _feed_last_attempt.get(fid, -100000)
+		if now - last < 3000:
+			continue
+		_feed_last_attempt[fid] = now
+		_select_feed_format(f)
+		f.set_active(true)
+		if f.is_active():
+			target_feed = f
+			break
+		else:
+			f.set_active(false)
 
 	if target_feed == null:
 		return
