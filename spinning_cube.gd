@@ -18,6 +18,10 @@ extends MeshInstance3D
 ## Webcam feed index (0 = default / built-in webcam)
 @export var webcam_feed_index: int = 0
 
+## Prefer a Raspberry Pi CSI/libcamera feed when one is available. CSI cameras
+## exposed through the V4L2 compatibility layer appear as normal CameraFeeds.
+@export var prefer_csi_camera: bool = true
+
 ## How the webcam frame fits onto the square cube face:
 ## 0 = Fit Letterbox (shows full camera frame without distortion/cropping)
 ## 1 = Cover (crops to fill entire square face)
@@ -145,8 +149,13 @@ func _activate_feed() -> void:
 
 	var now := Time.get_ticks_msec()
 	var candidates: Array = []
+	if prefer_csi_camera:
+		for f in feeds:
+			if _is_csi_feed(f):
+				candidates.append(f)
 	if webcam_feed_index >= 0 and webcam_feed_index < feeds.size():
-		candidates.append(feeds[webcam_feed_index])
+		if not candidates.has(feeds[webcam_feed_index]):
+			candidates.append(feeds[webcam_feed_index])
 	for f in feeds:
 		if f != null and not candidates.has(f):
 			candidates.append(f)
@@ -201,6 +210,15 @@ func _activate_feed() -> void:
 		_mat.set_shader_parameter("webcam_flip_h", flip_webcam_horizontal)
 		_mat.set_shader_parameter("webcam_fit_mode", webcam_fit_mode)
 		_update_feed_mode()
+
+func _is_csi_feed(feed: CameraFeed) -> bool:
+		if feed == null:
+			return false
+		var name := feed.get_name().to_lower()
+		for keyword in ["csi", "libcamera", "rpicam", "unicam"]:
+			if name.contains(keyword):
+				return true
+		return false
 
 func _update_feed_mode() -> void:
 	if current_feed == null or _mat == null:
