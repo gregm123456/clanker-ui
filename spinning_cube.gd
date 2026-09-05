@@ -103,10 +103,23 @@ func _on_camera_feed_event(_arg = null) -> void:
 
 func _select_feed_format(feed: CameraFeed) -> void:
 	# V4L2 (Linux / Raspberry Pi) requires an explicit format before activation,
-	# unlike macOS/iOS which auto-select one.
+	# unlike macOS/iOS which auto-select one. Index 0 can be an oversized or
+	# exotic pixel format that hangs or corrupts decoding, so pick the smallest
+	# advertised resolution instead, which is the safest/fastest to negotiate.
 	var formats := feed.get_formats()
-	if not formats.is_empty():
-		feed.set_format(0, {})
+	if formats.is_empty():
+		return
+	var best_index := 0
+	var best_pixels := -1
+	for i in formats.size():
+		var fmt: Dictionary = formats[i]
+		var w := int(fmt.get("width", 0))
+		var h := int(fmt.get("height", 0))
+		var pixels := w * h
+		if pixels > 0 and (best_pixels < 0 or pixels < best_pixels):
+			best_pixels = pixels
+			best_index = i
+	feed.set_format(best_index, {})
 
 func _activate_feed() -> void:
 	var feeds := CameraServer.feeds()
