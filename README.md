@@ -7,6 +7,9 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
 - **Raspberry Pi 5 & Single Board Computers**: Runs in full screen using Vulkan (Mobile) or OpenGL ES (GL Compatibility) rendering.
 - **Display Adaptability**: Dynamically adapts to any display size, resolution, and orientation (landscape, portrait, ultrawide, square) connected to the Raspberry Pi.
 - **USB Camera Support**: Automatically detects and displays live video feeds from standard USB cameras connected via Video4Linux2 (V4L2) on Linux / Raspberry Pi, as well as native feeds on macOS/Windows/iOS.
+- **CSI Camera Support**: On Raspberry Pi, CSI cameras exposed through the
+  `libcamera` V4L2 compatibility layer are preferred automatically when their
+  CameraFeed name contains `csi`, `libcamera`, `rpicam`, or `unicam`.
 - **Controls**:
   - `F11` or `Alt + Enter`: Toggle Full Screen / Windowed mode.
   - `M`: Toggle mouse pointer visibility.
@@ -19,6 +22,14 @@ Open the project in Godot 4.7 or later, then run `main.tscn`.
 ```bash
 godot --main-scene res://main.tscn
 ```
+
+### Raspberry Pi CSI cameras
+
+Install and enable the Raspberry Pi `libcamera`/`rpicam` stack with its V4L2
+compatibility layer. The application uses Godot's `CameraServer`, so the camera
+must be visible as a `CameraFeed` before the project starts. If both a CSI and
+USB camera are available, the CSI feed is selected by name; otherwise the
+configured feed index is used.
 
 ### Standalone on Raspberry Pi
 
