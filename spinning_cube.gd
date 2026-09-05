@@ -22,6 +22,12 @@ extends MeshInstance3D
 ## exposed through the V4L2 compatibility layer appear as normal CameraFeeds.
 @export var prefer_csi_camera: bool = true
 
+## Requested processed stream size for the native Raspberry Pi CSI provider
+@export var csi_camera_width: int = 960
+@export var csi_camera_height: int = 540
+@export var csi_camera_fps: int = 30
+@export var csi_camera_name: String = ""
+
 ## How the webcam frame fits onto the square cube face:
 ## 0 = Fit Letterbox (shows full camera frame without distortion/cropping)
 ## 1 = Cover (crops to fill entire square face)
@@ -47,6 +53,7 @@ var _mat: ShaderMaterial
 var _feed_retry_timer: float = 0.0
 var _last_webcam_aspect: float = -1.0
 var _last_datatype: int = -1
+var _csi_provider: CsiCameraProvider
 
 func _ready() -> void:
 	if start_fullscreen:
@@ -110,12 +117,38 @@ func _find_camera() -> void:
 	camera = get_viewport().get_camera_3d()
 
 func _setup_webcam() -> void:
+	if prefer_csi_camera and _setup_csi_camera():
+		return
+
 	CameraServer.set_monitoring_feeds(true)
 	if not CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.connect(_on_camera_feed_event)
 	if not CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feeds_updated.connect(_on_camera_feed_event)
 	_activate_feed()
+
+func _setup_csi_camera() -> bool:
+	_csi_provider = CsiCameraProvider.new()
+	if not _csi_provider.start(csi_camera_width, csi_camera_height, csi_camera_fps, csi_camera_name):
+		print("[webcam] CSI provider unavailable: ", _csi_provider.get_last_error())
+		_csi_provider = null
+		return false
+
+	print("[webcam] using CSI camera provider at ", csi_camera_width, "x", csi_camera_height, " @ ", csi_camera_fps, " fps")
+	return true
+
+func _update_csi_camera() -> void:
+	if _csi_provider == null or _mat == null:
+		return
+	if _csi_provider.update():
+		_mat.set_shader_parameter("webcam_texture", _csi_provider.get_texture())
+		_mat.set_shader_parameter("webcam_mode", 1)
+		_mat.set_shader_parameter("webcam_aspect", _csi_provider.get_aspect())
+
+func _exit_tree() -> void:
+	if _csi_provider != null:
+		_csi_provider.stop()
+		_csi_provider = null
 
 func _on_camera_feed_event(_arg = null) -> void:
 	if current_feed == null or not current_feed.is_active():
@@ -240,7 +273,10 @@ func _update_feed_mode() -> void:
 
 func _process(delta: float) -> void:
 	# Retry activating webcam or updating mode if format changed
-	if enable_webcam:
+	if _csi_provider != null:
+		_update_csi_camera()
+
+	if enable_webcam and _csi_provider == null:
 		if current_feed == null or not current_feed.is_active():
 			_feed_retry_timer += delta
 			if _feed_retry_timer >= 0.5:

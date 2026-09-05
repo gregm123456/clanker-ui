@@ -8,3 +8,10 @@ clankerUI.pck
 #clankerUI.sh
 clankerUI.x86_64
 export_presets.cfg
+
+# Raspberry Pi CSI camera native build output
+addons/csi_camera/build/
+addons/csi_camera/godot-cpp/
+addons/csi_camera/bin/
+addons/csi_camera/csi_camera.gdextension
+addons/csi_camera/csi_camera.gdextension.uid
