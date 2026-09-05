@@ -6,12 +6,12 @@
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
-background_color = Color(0.08, 0.09, 0.13, 1)
+background_color = Color(0, 0, 0, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.6, 0.65, 0.75, 1)
-ambient_light_energy = 0.5
-tonemap_mode = 3
-glow_enabled = true
+ambient_light_energy = 0.8
+tonemap_mode = 0
+glow_enabled = false
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_1"]
 render_priority = 0
