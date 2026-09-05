@@ -145,7 +145,7 @@ func _activate_feed() -> void:
 			break
 		# Skip feeds that failed recently to avoid hammering the device with
 		# repeated set_format/set_active calls every retry tick.
-		var fid := f.get_id()
+		var fid: int = f.get_id()
 		var last: int = _feed_last_attempt.get(fid, -100000)
 		if now - last < 3000:
 			continue
