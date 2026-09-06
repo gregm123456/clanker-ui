@@ -56,6 +56,8 @@ var _last_datatype: int = -1
 var _csi_provider: CsiCameraProvider
 
 func _ready() -> void:
+	_randomize_speed_and_velocity()
+
 	if start_fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
@@ -73,6 +75,19 @@ func _ready() -> void:
 
 	if enable_webcam:
 		_setup_webcam()
+
+## Applies an independent random 0.8-1.2 scale factor to each component of
+## tumble_speed and move_velocity so each run/instance varies slightly.
+func _randomize_speed_and_velocity() -> void:
+	tumble_speed = Vector3(
+		tumble_speed.x * randf_range(0.01, 1.0),
+		tumble_speed.y * randf_range(0.01, 1.0),
+		tumble_speed.z * randf_range(0.01, 2.0)
+	)
+	move_velocity = Vector2(
+		move_velocity.x * randf_range(0.01, 4.0),
+		move_velocity.y * randf_range(0.1, 1.5)
+	)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():

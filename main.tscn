@@ -28,7 +28,7 @@ shader_parameter/cube_size = Vector3(1.8, 1.8, 1.8)
 
 [sub_resource type="BoxMesh" id="BoxMesh_1"]
 material = SubResource("ShaderMaterial_1")
-size = Vector3(4.0, 4.0, 0.1)
+size = Vector3(5.0, 5.0, 0.1)
 
 [node name="Main" type="Node3D"]
 
@@ -53,7 +53,7 @@ fov = 65.0
 [node name="SpinningCube" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_1")
 script = ExtResource("1_cube_script")
-tumble_speed = Vector3(1.0, 1.0, 1.0)
+tumble_speed = Vector3(0.75, 0.75, 0.0)
 move_velocity = Vector2(1.0, 2.0)
 wrap_margin = 0.8
 prefer_csi_camera = true
