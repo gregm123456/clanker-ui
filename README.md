@@ -197,17 +197,71 @@ or, on fallback:
 
 ### Troubleshooting
 
-**`Can't create an EGL context` / `MESA: error: Couldn't get V3D core IDENT0`**
-This happens when launching over a remote/VNC session (e.g. `rpi-connect`/`wayvnc`) whose
-compositor socket doesn't expose the real GPU the same way a local session does. As a
-fallback, force software rendering:
+**Running over a remote/VNC session (e.g. `rpi-connect`/`wayvnc`, or SSH into an existing
+desktop session) instead of the Pi's local/attached display**
+An SSH shell does not automatically inherit the desktop session's display environment. Find
+the running session's values first (from an SSH shell, not the desktop itself):
 
 ```bash
-LIBGL_ALWAYS_SOFTWARE=1 ./clankerUI.sh
+loginctl list-sessions --no-legend
+ps -u "$USER" -o pid,args | grep -E 'labwc|Xwayland|wayland'
 ```
 
+Look for a process environment containing `DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`,
+`XDG_RUNTIME_DIR=/run/user/<uid>`, and `XAUTHORITY=/home/<user>/.Xauthority` (values will vary
+per system), then pass them explicitly:
+
+```bash
+DISPLAY=:0 \
+XAUTHORITY="$HOME/.Xauthority" \
+./clankerUI.sh
+```
+
+Prefer testing on the Pi's local/attached display first — plugging in a real monitor and
+running `./clankerUI.sh` from a terminal there needs none of this.
+
+**`Can't create an EGL context` / `MESA: error: Couldn't get V3D core IDENT0`**
+On some remote/VNC sessions, the compositor's GPU/DRI device selection doesn't match a local
+session, and hardware-accelerated EGL fails outright even with a correct `DISPLAY`. Two
+environment variables are the usual culprits:
+
+- `DRI_PRIME` and `MESA_LOADER_DRIVER_OVERRIDE`, if set (e.g. inherited from a prior shell or
+  `.bashrc`), can force Mesa to pick the wrong GPU driver. Unset them:
+  `env -u DRI_PRIME -u MESA_LOADER_DRIVER_OVERRIDE ./clankerUI.sh`
+
+If unsetting those doesn't help, fall back to software rendering (slower, but works anywhere
+X11/Xwayland is reachable):
+
+```bash
+env \
+  -u DRI_PRIME \
+  -u MESA_LOADER_DRIVER_OVERRIDE \
+  LIBGL_ALWAYS_SOFTWARE=1 \
+  DISPLAY=:0 \
+  XAUTHORITY="$HOME/.Xauthority" \
+  ./clankerUI.sh \
+  --display-driver x11 \
+  --rendering-method gl_compatibility
+```
+
+- `LIBGL_ALWAYS_SOFTWARE=1` forces Mesa's `llvmpipe` software renderer instead of the V3D GPU
+  driver.
+- `--display-driver x11` skips Godot's Wayland backend (which hit the same EGL failure here)
+  in favor of Xwayland, which is present on Raspberry Pi OS's default `labwc` desktop.
+- `--rendering-method gl_compatibility` matches the renderer already baked into the Linux
+  export (see `project.godot`), so it's not strictly required here but is harmless to repeat.
+
 Prefer testing on the Pi's local/attached display first; hardware-accelerated rendering should
-work there without any extra environment variables.
+work there without any of the above.
+
+**`GST_PLUGIN_PATH` / `LD_LIBRARY_PATH` pointing at a custom directory**
+These are **not** part of a normal deployment. They're only needed if GStreamer/`libcamera`
+packages were staged manually into a non-system prefix (for example, while working around a
+missing `sudo` password during development) instead of installed with
+`sudo apt install ...gstreamer1.0-libcamera...` as documented above. If you followed the
+prerequisites section, the system linker and GStreamer's default plugin scanner already find
+everything in `/usr/lib/aarch64-linux-gnu`, and neither variable should be set when running
+`clankerUI.sh`.
 
 **`arducam-pivariety.json not found` (or similar tuning-file warning) from `libcamera`**
 Capture still works without it, but exposure/color may be suboptimal. Install the correct
@@ -215,7 +269,8 @@ tuning file for your sensor from your camera vendor's `libcamera` package, or ig
 image quality is acceptable.
 
 **`gst-inspect-1.0 libcamerasrc` reports no such element**
-`gstreamer1.0-libcamera` is not installed (see prerequisites above), or `GST_PLUGIN_PATH` is
+`gstreamer1.0-libcamera` is not installed (see prerequisites above), or a leftover
+`GST_PLUGIN_PATH`/`GST_PLUGIN_SYSTEM_PATH` from manual package staging (see above) is
 overriding the system plugin search path. Run `gst-inspect-1.0 libcamerasrc` in a clean shell
 (no `GST_PLUGIN_PATH`/`GST_PLUGIN_SYSTEM_PATH` set) to confirm.
 
