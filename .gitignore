@@ -15,3 +15,4 @@ addons/csi_camera/godot-cpp/
 addons/csi_camera/bin/
 addons/csi_camera/csi_camera.gdextension
 addons/csi_camera/csi_camera.gdextension.uid
+libcsi_camera.linux.arm64.so

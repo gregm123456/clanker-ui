@@ -3,6 +3,7 @@ render_mode cull_back;
 
 uniform sampler2D front_texture : source_color, filter_linear_mipmap;
 uniform vec4 front_face_bg : source_color = vec4(0.95, 0.95, 0.98, 1.0);
+uniform bool use_front_texture = false;
 
 // Webcam uniforms
 uniform sampler2D webcam_texture : filter_linear_mipmap;
@@ -85,12 +86,12 @@ void fragment() {
 
 	vec3 base_color = cube_color.rgb;
 
-	if (face_id == 0) {
+	if (use_front_texture && face_id == 0) {
 		// Face 1: Image face (Front +Z)
 		vec4 tex = texture(front_texture, face_uv);
 		base_color = mix(front_face_bg.rgb, tex.rgb, tex.a);
 	} else {
-		// Faces 1 through 5: Live Webcam feed on all other 5 faces
+		// Live Webcam feed on faces
 		vec2 cam_uv = face_uv;
 		bool in_bounds = true;
 

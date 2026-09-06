@@ -18,16 +18,17 @@ render_priority = 0
 shader = ExtResource("2_shader")
 shader_parameter/front_texture = ExtResource("3_icon")
 shader_parameter/front_face_bg = Color(0.95, 0.95, 0.98, 1)
+shader_parameter/use_front_texture = false
 shader_parameter/cube_color = Color(0.12, 0.15, 0.22, 1)
-shader_parameter/border_color = Color(0.35, 0.65, 0.95, 1)
-shader_parameter/border_thickness = 0.035
+shader_parameter/border_color = Color(0.20, 0.30, 0.45, 0.5)
+shader_parameter/border_thickness = 0.015
 shader_parameter/roughness = 0.3
 shader_parameter/metallic = 0.15
 shader_parameter/cube_size = Vector3(1.8, 1.8, 1.8)
 
 [sub_resource type="BoxMesh" id="BoxMesh_1"]
 material = SubResource("ShaderMaterial_1")
-size = Vector3(1.8, 1.8, 1.8)
+size = Vector3(4.0, 4.0, 0.1)
 
 [node name="Main" type="Node3D"]
 
@@ -52,7 +53,7 @@ fov = 65.0
 [node name="SpinningCube" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_1")
 script = ExtResource("1_cube_script")
-tumble_speed = Vector3(0.12, 0.18, 0.09)
-move_velocity = Vector2(2.2, 1.4)
-wrap_margin = 1.8
+tumble_speed = Vector3(1.0, 1.0, 1.0)
+move_velocity = Vector2(1.0, 2.0)
+wrap_margin = 0.8
 prefer_csi_camera = true
