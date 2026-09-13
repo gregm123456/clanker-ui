@@ -63,6 +63,9 @@ func shutdown() -> void:
 		CameraServer.camera_feeds_updated.disconnect(_on_camera_feed_event)
 	if current_feed != null and current_feed.format_changed.is_connected(_update_feed_mode):
 		current_feed.format_changed.disconnect(_update_feed_mode)
+	if current_feed != null:
+		current_feed.set_active(false)
+		current_feed = null
 	if _csi_provider != null:
 		_csi_provider.stop()
 		_csi_provider = null
