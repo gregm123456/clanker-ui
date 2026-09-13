@@ -186,7 +186,6 @@ func _activate_feed() -> void:
 	if target_feed == null:
 		return
 
-	_is_switching_feed = true
 	var previous_feed := current_feed
 	var previous_feed_owned := _current_feed_owned
 	if current_feed != null and current_feed != target_feed:
@@ -218,8 +217,9 @@ func _activate_feed() -> void:
 		_update_feed_mode()
 
 	if previous_feed != null and previous_feed != current_feed and previous_feed_owned:
+		_is_switching_feed = true
 		previous_feed.set_active(false)
-	_is_switching_feed = false
+		_is_switching_feed = false
 
 func _is_csi_feed(feed: CameraFeed) -> bool:
 	if feed == null:
