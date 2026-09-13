@@ -26,10 +26,10 @@ var _csi_provider: CsiCameraProvider
 func setup(material: ShaderMaterial) -> void:
 	shutdown()
 	_material = material
+	_reset_material_webcam_state()
 	if prefer_csi_camera and _setup_csi_camera():
 		return
 
-	_reset_material_webcam_state()
 	CameraServer.set_monitoring_feeds(true)
 	if not CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.connect(_on_camera_feed_event)
@@ -92,6 +92,10 @@ func _setup_csi_camera() -> bool:
 		_csi_provider = null
 		return false
 
+	if _material != null:
+		_material.set_shader_parameter("webcam_mode", 1)
+		if csi_camera_height > 0:
+			_material.set_shader_parameter("webcam_aspect", float(csi_camera_width) / float(csi_camera_height))
 	print("[webcam] using CSI camera provider at ", csi_camera_width, "x", csi_camera_height, " @ ", csi_camera_fps, " fps")
 	return true
 

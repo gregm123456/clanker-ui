@@ -99,6 +99,7 @@ func _find_camera() -> void:
 
 func _exit_tree() -> void:
 	_camera_source.shutdown()
+	_webcam_started = false
 
 func _process(delta: float) -> void:
 	_update_webcam_state()
