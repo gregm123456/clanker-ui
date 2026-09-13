@@ -18,6 +18,7 @@ var current_feed: CameraFeed
 var _feed_last_attempt: Dictionary = {}
 var _pending_deactivation_feed_ids: Dictionary = {}
 var _current_feed_owned: bool = false
+var _deactivation_generation: int = 0
 var _feed_retry_timer: float = 0.0
 var _last_webcam_aspect: float = -1.0
 var _last_datatype: int = -1
@@ -61,6 +62,7 @@ func process(delta: float) -> void:
 				_material.set_shader_parameter("webcam_aspect", aspect)
 
 func shutdown() -> void:
+	_deactivation_generation += 1
 	if CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.disconnect(_on_camera_feed_event)
 	if CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
@@ -112,7 +114,8 @@ func _update_csi_camera() -> void:
 		_material.set_shader_parameter("webcam_aspect", _csi_provider.get_aspect())
 
 func _on_camera_feed_event(_arg = null) -> void:
-	_activate_feed()
+	if current_feed == null or not current_feed.is_active():
+		_activate_feed()
 
 func _select_feed_format(feed: CameraFeed) -> void:
 	var formats := feed.get_formats()
@@ -245,14 +248,14 @@ func _reset_material_webcam_state() -> void:
 func _schedule_feed_deactivation(feed: CameraFeed) -> void:
 	if feed == null:
 		return
-	_pending_deactivation_feed_ids[feed.get_id()] = true
-	call_deferred("_finish_feed_deactivation", feed)
+	_pending_deactivation_feed_ids[feed.get_id()] = _deactivation_generation
+	call_deferred("_finish_feed_deactivation", feed, _deactivation_generation)
 
-func _finish_feed_deactivation(feed: CameraFeed) -> void:
+func _finish_feed_deactivation(feed: CameraFeed, generation: int) -> void:
 	if feed == null:
 		return
 	var feed_id := feed.get_id()
-	if not _pending_deactivation_feed_ids.get(feed_id, false):
+	if _pending_deactivation_feed_ids.get(feed_id, -1) != generation:
 		return
 	feed.set_active(false)
 	_pending_deactivation_feed_ids.erase(feed_id)
