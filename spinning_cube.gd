@@ -47,7 +47,7 @@ const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_sou
 ## Automatically hide mouse cursor (ideal for kiosk / fullscreen runs)
 @export var hide_mouse_cursor: bool = true
 
-@onready var camera: Camera3D = get_viewport().get_camera_3d()
+var camera: Camera3D
 
 var _mat: ShaderMaterial
 var _input_controller = SpinningCubeInputControllerScript.new()
@@ -55,6 +55,7 @@ var _movement_controller = SpinningCubeMovementControllerScript.new()
 var _camera_source = WebcamCameraSourceAdapterScript.new()
 
 func _ready() -> void:
+	camera = get_viewport().get_camera_3d()
 	_configure_components()
 	_movement_controller.randomize_speed_and_velocity()
 	tumble_speed = _movement_controller.tumble_speed
