@@ -65,6 +65,13 @@ After this, each feature can target mostly separate modules.
 - Merge both into coordinator script and shared scene contracts.
 - Run focused integration checks for camera offset correctness + movement synchronization behavior.
 
+### Phase 3 (follow-on for dynamic runtime content)
+
+- Add a dedicated **object lifecycle stream** (`spawn`, `update`, `despawn`) with stable object IDs and owner/authority metadata.
+- Keep media handling split by concern: stream **references/parameters** for audio, textures, text, and meshes over the network, while each node loads/caches assets locally.
+- Introduce object-type adapters (audio-emitter, text-surface, textured mesh, procedural shape) behind one runtime factory interface so new object types can be added without changing transport logic.
+- Add node-safe reconciliation rules for late-join and temporary disconnects (snapshot + delta replay).
+
 ## Specific advice: Feature 1 (decentralized Raspberry Pi mesh “multiplayer” view wall)
 
 1. **Define authority per data type before coding**
@@ -80,10 +87,14 @@ After this, each feature can target mostly separate modules.
 4. **Stabilize transform serialization early**
    - Use a versioned schema for position/rotation/time metadata to avoid protocol churn between forks.
 
-5. **Plan for degraded/offline peers**
+5. **Define a stream strategy for dynamic object instantiation**
+   - Treat network traffic as **state/event streams**, not media streams: replicate object lifecycle, transforms, and render/audio configuration, not raw video/audio payloads.
+   - Use capability-aware descriptors so any peer can instantiate future object types (shape, texture/pattern, static image, text, audio) from a common schema.
+
+6. **Plan for degraded/offline peers**
    - Nodes should continue rendering with last known shared state when peers drop.
 
-6. **Keep the current CSI/video path independent from state sync**
+7. **Keep the current CSI/video path independent from state sync**
    - Camera texture acquisition must remain local; synchronize scene state, not camera frames.
 
 ## Specific advice: Feature 2 (object movement from 2D to 3D)
@@ -96,9 +107,11 @@ After this, each feature can target mostly separate modules.
 
 3. **Refactor wraparound/bounds as a strategy**
    - Current bounds are camera-relative x/y logic. Introduce pluggable bounds modes (none, 2D plane wrap, 3D volume wrap/clamp).
+   - Include explicit options for both **wrap** and **hard-walled box** behavior in 3D.
 
 4. **Document world-axis conventions**
    - Explicitly define forward/up/right expectations and camera-relative vs world-relative movement rules.
+   - Tie bounds evaluation to the physical installation geometry (screen layout/calibration resource), not just viewport math.
 
 5. **Design for future network determinism**
    - Use fixed-step movement update paths (or deterministic snapshots) to reduce divergence across mesh peers.
@@ -110,6 +123,7 @@ After this, each feature can target mostly separate modules.
 
 2. **Adopt contract-first changes**
    - Define GDScript interfaces/resources/signals for movement, sync, and calibration before deep implementation.
+   - Add shared contracts for object descriptors and lifecycle events before adding new object classes.
 
 3. **Minimize shared-file edits per PR**
    - Prefer new focused scripts over repeated edits to `spinning_cube.gd`.
