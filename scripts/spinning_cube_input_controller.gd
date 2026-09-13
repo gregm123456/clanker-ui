@@ -6,9 +6,12 @@ var _preferred_fullscreen_mode: int = DisplayServer.WINDOW_MODE_FULLSCREEN
 
 func apply_startup_state(start_fullscreen: bool, should_hide_mouse_cursor: bool) -> void:
 	hide_mouse_cursor = should_hide_mouse_cursor
+	var current_mode := DisplayServer.window_get_mode()
+	if current_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or current_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+		_preferred_fullscreen_mode = current_mode
 
 	if start_fullscreen:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		DisplayServer.window_set_mode(_preferred_fullscreen_mode)
 
 	if hide_mouse_cursor:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
