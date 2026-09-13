@@ -72,16 +72,19 @@ func handle_wraparound(target: Node3D, camera: Camera3D, viewport: Viewport) -> 
 	var bound_x := half_w + wrap_margin
 	var bound_y := half_h + wrap_margin
 
-	var rel_x := target.global_position.x - cam_pos.x
+	var next_global_position := target.global_position
+	var rel_x := next_global_position.x - cam_pos.x
 	if rel_x > bound_x:
-		target.global_position.x = cam_pos.x - bound_x
+		next_global_position.x = cam_pos.x - bound_x
 	elif rel_x < -bound_x:
-		target.global_position.x = cam_pos.x + bound_x
+		next_global_position.x = cam_pos.x + bound_x
 
-	var rel_y := target.global_position.y - cam_pos.y
+	var rel_y := next_global_position.y - cam_pos.y
 	if rel_y > bound_y:
-		target.global_position.y = cam_pos.y - bound_y
+		next_global_position.y = cam_pos.y - bound_y
 	elif rel_y < -bound_y:
-		target.global_position.y = cam_pos.y + bound_y
+		next_global_position.y = cam_pos.y + bound_y
+
+	target.global_position = next_global_position
 
 	return resolved_camera
