@@ -70,6 +70,14 @@ func shutdown() -> void:
 	if _csi_provider != null:
 		_csi_provider.stop()
 		_csi_provider = null
+	webcam_y_texture = null
+	webcam_cbcr_texture = null
+	_material = null
+	_feed_last_attempt.clear()
+	_owned_feed_ids.clear()
+	_feed_retry_timer = 0.0
+	_last_webcam_aspect = -1.0
+	_last_datatype = -1
 
 func _setup_csi_camera() -> bool:
 	_csi_provider = CsiCameraProviderScript.new()
@@ -132,10 +140,12 @@ func _activate_feed() -> void:
 	for feed in candidates:
 		if feed == null:
 			continue
+		var feed_id := feed.get_id()
 		if feed.is_active():
+			if current_feed == feed or _owned_feed_ids.get(feed_id, false):
+				_owned_feed_ids[feed_id] = true
 			target_feed = feed
 			break
-		var feed_id: int = feed.get_id()
 		var last_attempt: int = _feed_last_attempt.get(feed_id, -100000)
 		if now - last_attempt < 3000:
 			continue
