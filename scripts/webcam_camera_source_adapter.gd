@@ -79,6 +79,11 @@ func shutdown() -> void:
 	if _csi_provider != null:
 		_csi_provider.stop()
 		_csi_provider = null
+	if _material != null:
+		_material.set_shader_parameter("webcam_texture", null)
+		_material.set_shader_parameter("webcam_cbcr_texture", null)
+		_material.set_shader_parameter("webcam_mode", 0)
+		_material.set_shader_parameter("webcam_aspect", 1.777778)
 	webcam_y_texture = null
 	webcam_cbcr_texture = null
 	_material = null
