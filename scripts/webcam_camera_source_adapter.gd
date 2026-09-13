@@ -29,6 +29,7 @@ func setup(material: ShaderMaterial) -> void:
 	if prefer_csi_camera and _setup_csi_camera():
 		return
 
+	_reset_material_webcam_state()
 	CameraServer.set_monitoring_feeds(true)
 	if not CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.connect(_on_camera_feed_event)
@@ -74,10 +75,7 @@ func shutdown() -> void:
 		_csi_provider.stop()
 		_csi_provider = null
 	if _material != null:
-		_material.set_shader_parameter("webcam_texture", null)
-		_material.set_shader_parameter("webcam_cbcr_texture", null)
-		_material.set_shader_parameter("webcam_mode", 0)
-		_material.set_shader_parameter("webcam_aspect", 1.777778)
+		_reset_material_webcam_state()
 	webcam_y_texture = null
 	webcam_cbcr_texture = null
 	_material = null
@@ -225,3 +223,11 @@ func _update_feed_mode() -> void:
 			_material.set_shader_parameter("webcam_mode", 2)
 		else:
 			_material.set_shader_parameter("webcam_mode", 1)
+
+func _reset_material_webcam_state() -> void:
+	if _material == null:
+		return
+	_material.set_shader_parameter("webcam_texture", null)
+	_material.set_shader_parameter("webcam_cbcr_texture", null)
+	_material.set_shader_parameter("webcam_mode", 0)
+	_material.set_shader_parameter("webcam_aspect", 1.777778)
