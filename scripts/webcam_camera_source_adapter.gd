@@ -146,8 +146,10 @@ func _activate_feed() -> void:
 	if target_feed == null:
 		return
 
-	if current_feed != null and current_feed != target_feed and current_feed.format_changed.is_connected(_update_feed_mode):
-		current_feed.format_changed.disconnect(_update_feed_mode)
+	if current_feed != null and current_feed != target_feed:
+		if current_feed.format_changed.is_connected(_update_feed_mode):
+			current_feed.format_changed.disconnect(_update_feed_mode)
+		current_feed.set_active(false)
 
 	current_feed = target_feed
 	if not current_feed.format_changed.is_connected(_update_feed_mode):
