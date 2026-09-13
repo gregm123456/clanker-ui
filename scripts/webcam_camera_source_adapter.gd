@@ -25,6 +25,7 @@ var _csi_provider: CsiCameraProvider
 var _did_connect_feed_added: bool = false
 var _did_connect_feeds_updated: bool = false
 var _did_enable_feed_monitoring: bool = false
+var _is_switching_feed: bool = false
 
 func setup(material: ShaderMaterial) -> void:
 	shutdown()
@@ -100,6 +101,7 @@ func shutdown() -> void:
 	_did_connect_feed_added = false
 	_did_connect_feeds_updated = false
 	_did_enable_feed_monitoring = false
+	_is_switching_feed = false
 
 func _setup_csi_camera() -> bool:
 	_csi_provider = CsiCameraProviderScript.new()
@@ -120,6 +122,8 @@ func _update_csi_camera() -> void:
 		_material.set_shader_parameter("webcam_aspect", _csi_provider.get_aspect())
 
 func _on_camera_feed_event(_arg = null) -> void:
+	if _is_switching_feed:
+		return
 	if current_feed == null or not current_feed.is_active():
 		_activate_feed()
 
@@ -182,6 +186,7 @@ func _activate_feed() -> void:
 	if target_feed == null:
 		return
 
+	_is_switching_feed = true
 	var previous_feed := current_feed
 	var previous_feed_owned := _current_feed_owned
 	if current_feed != null and current_feed != target_feed:
@@ -214,6 +219,7 @@ func _activate_feed() -> void:
 
 	if previous_feed != null and previous_feed != current_feed and previous_feed_owned:
 		previous_feed.set_active(false)
+	_is_switching_feed = false
 
 func _is_csi_feed(feed: CameraFeed) -> bool:
 	if feed == null:
