@@ -22,8 +22,6 @@ var _last_webcam_aspect: float = -1.0
 var _last_datatype: int = -1
 var _material: ShaderMaterial
 var _csi_provider: CsiCameraProvider
-var _did_connect_feed_added: bool = false
-var _did_connect_feeds_updated: bool = false
 var _did_enable_feed_monitoring: bool = false
 
 func setup(material: ShaderMaterial) -> void:
@@ -37,10 +35,8 @@ func setup(material: ShaderMaterial) -> void:
 	_did_enable_feed_monitoring = not was_monitoring_feeds
 	if not CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.connect(_on_camera_feed_event)
-		_did_connect_feed_added = true
 	if not CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feeds_updated.connect(_on_camera_feed_event)
-		_did_connect_feeds_updated = true
 	_activate_feed()
 
 func process(delta: float) -> void:
@@ -66,9 +62,9 @@ func process(delta: float) -> void:
 				_material.set_shader_parameter("webcam_aspect", aspect)
 
 func shutdown() -> void:
-	if _did_connect_feed_added and CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
+	if CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.disconnect(_on_camera_feed_event)
-	if _did_connect_feeds_updated and CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
+	if CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feeds_updated.disconnect(_on_camera_feed_event)
 	if _did_enable_feed_monitoring:
 		CameraServer.set_monitoring_feeds(false)
@@ -93,8 +89,6 @@ func shutdown() -> void:
 	_feed_retry_timer = 0.0
 	_last_webcam_aspect = -1.0
 	_last_datatype = -1
-	_did_connect_feed_added = false
-	_did_connect_feeds_updated = false
 	_did_enable_feed_monitoring = false
 
 func _setup_csi_camera() -> bool:
@@ -172,7 +166,6 @@ func _activate_feed() -> void:
 			_owned_feed_ids[feed_id] = true
 			target_feed = feed
 			break
-		feed.set_active(false)
 
 	if target_feed == null:
 		return
