@@ -31,8 +31,9 @@ func setup(material: ShaderMaterial) -> void:
 	if prefer_csi_camera and _setup_csi_camera():
 		return
 
+	var was_monitoring_feeds := CameraServer.is_monitoring_feeds()
 	CameraServer.set_monitoring_feeds(true)
-	_did_enable_feed_monitoring = true
+	_did_enable_feed_monitoring = not was_monitoring_feeds
 	if not CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.connect(_on_camera_feed_event)
 		_did_connect_feed_added = true
