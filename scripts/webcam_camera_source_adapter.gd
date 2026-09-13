@@ -16,6 +16,7 @@ var webcam_y_texture: CameraTexture
 var webcam_cbcr_texture: CameraTexture
 var current_feed: CameraFeed
 var _feed_last_attempt: Dictionary = {}
+var _pending_deactivation_feed_ids: Dictionary = {}
 var _current_feed_owned: bool = false
 var _feed_retry_timer: float = 0.0
 var _last_webcam_aspect: float = -1.0
@@ -80,6 +81,7 @@ func shutdown() -> void:
 	webcam_cbcr_texture = null
 	_material = null
 	_feed_last_attempt.clear()
+	_pending_deactivation_feed_ids.clear()
 	_feed_retry_timer = 0.0
 	_last_webcam_aspect = -1.0
 	_last_datatype = -1
@@ -151,6 +153,8 @@ func _activate_feed() -> void:
 		if feed == null:
 			continue
 		var feed_id := feed.get_id()
+		if _pending_deactivation_feed_ids.get(feed_id, false):
+			continue
 		if feed.is_active():
 			target_feed = feed
 			target_feed_owned = (feed == current_feed and _current_feed_owned)
@@ -200,7 +204,7 @@ func _activate_feed() -> void:
 		_update_feed_mode()
 
 	if previous_feed != null and previous_feed != current_feed and previous_feed_owned:
-		previous_feed.call_deferred("set_active", false)
+		_schedule_feed_deactivation(previous_feed)
 
 func _is_csi_feed(feed: CameraFeed) -> bool:
 	if feed == null:
@@ -235,3 +239,16 @@ func _reset_material_webcam_state() -> void:
 	_material.set_shader_parameter("webcam_cbcr_texture", null)
 	_material.set_shader_parameter("webcam_mode", 0)
 	_material.set_shader_parameter("webcam_aspect", 1.777778)
+
+func _schedule_feed_deactivation(feed: CameraFeed) -> void:
+	if feed == null:
+		return
+	_pending_deactivation_feed_ids[feed.get_id()] = true
+	call_deferred("_finish_feed_deactivation", feed)
+
+func _finish_feed_deactivation(feed: CameraFeed) -> void:
+	if feed == null:
+		return
+	var feed_id := feed.get_id()
+	feed.set_active(false)
+	_pending_deactivation_feed_ids.erase(feed_id)
