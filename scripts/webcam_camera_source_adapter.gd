@@ -95,6 +95,8 @@ func _setup_csi_camera() -> bool:
 		return false
 
 	if _material != null:
+		_material.set_shader_parameter("webcam_texture", _csi_provider.get_texture())
+		_material.set_shader_parameter("webcam_cbcr_texture", null)
 		_material.set_shader_parameter("webcam_mode", 1)
 		if csi_camera_height > 0:
 			_material.set_shader_parameter("webcam_aspect", float(csi_camera_width) / float(csi_camera_height))
@@ -250,5 +252,7 @@ func _finish_feed_deactivation(feed: CameraFeed) -> void:
 	if feed == null:
 		return
 	var feed_id := feed.get_id()
+	if not _pending_deactivation_feed_ids.get(feed_id, false):
+		return
 	feed.set_active(false)
 	_pending_deactivation_feed_ids.erase(feed_id)
