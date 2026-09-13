@@ -151,10 +151,10 @@ func _activate_feed() -> void:
 	if target_feed == null:
 		return
 
+	var previous_feed := current_feed
 	if current_feed != null and current_feed != target_feed:
 		if current_feed.format_changed.is_connected(_update_feed_mode):
 			current_feed.format_changed.disconnect(_update_feed_mode)
-		_deactivate_owned_feed(current_feed)
 
 	current_feed = target_feed
 	if not current_feed.format_changed.is_connected(_update_feed_mode):
@@ -178,6 +178,9 @@ func _activate_feed() -> void:
 		_material.set_shader_parameter("webcam_flip_h", flip_webcam_horizontal)
 		_material.set_shader_parameter("webcam_fit_mode", webcam_fit_mode)
 		_update_feed_mode()
+
+	if previous_feed != null and previous_feed != current_feed:
+		_deactivate_owned_feed(previous_feed)
 
 func _is_csi_feed(feed: CameraFeed) -> bool:
 	if feed == null:
