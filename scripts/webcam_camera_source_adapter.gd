@@ -27,6 +27,7 @@ var _did_connect_feeds_updated: bool = false
 var _did_enable_feed_monitoring: bool = false
 
 func setup(material: ShaderMaterial) -> void:
+	shutdown()
 	_material = material
 	if prefer_csi_camera and _setup_csi_camera():
 		return
