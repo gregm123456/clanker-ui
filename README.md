@@ -16,6 +16,13 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
   - `M`: Toggle mouse pointer visibility.
   - `Escape`: Quit application.
 
+## Runtime architecture
+
+- `spinning_cube.gd` now acts as a thin scene coordinator.
+- `scripts/spinning_cube_input_controller.gd` owns keyboard input and window/mouse mode toggles.
+- `scripts/spinning_cube_movement_controller.gd` owns tumbling, planar movement, and wraparound behavior.
+- `scripts/webcam_camera_source_adapter.gd` owns webcam source selection and runtime updates while preserving the existing `CsiCameraProvider` and `CameraServer` paths.
+
 ## Run (development)
 
 Open the project in Godot 4.7 or later, then run `main.tscn`.
