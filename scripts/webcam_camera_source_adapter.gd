@@ -27,6 +27,7 @@ var _did_enable_feed_monitoring: bool = false
 func setup(material: ShaderMaterial) -> void:
 	shutdown()
 	_material = material
+	_did_enable_feed_monitoring = false
 	if prefer_csi_camera and _setup_csi_camera():
 		return
 
@@ -52,7 +53,7 @@ func process(delta: float) -> void:
 		elif current_feed.get_datatype() != _last_datatype:
 			_update_feed_mode()
 
-	if webcam_y_texture != null and _material != null:
+	if _csi_provider == null and webcam_y_texture != null and _material != null:
 		var tw := float(webcam_y_texture.get_width())
 		var th := float(webcam_y_texture.get_height())
 		if tw > 0.0 and th > 0.0:
