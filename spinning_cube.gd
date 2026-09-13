@@ -53,6 +53,7 @@ var _mat: ShaderMaterial
 var _input_controller = SpinningCubeInputControllerScript.new()
 var _movement_controller = SpinningCubeMovementControllerScript.new()
 var _camera_source = WebcamCameraSourceAdapterScript.new()
+var _webcam_started: bool = false
 
 func _ready() -> void:
 	camera = get_viewport().get_camera_3d()
@@ -71,8 +72,7 @@ func _ready() -> void:
 	if vp != null and not vp.size_changed.is_connected(_on_viewport_size_changed):
 		vp.size_changed.connect(_on_viewport_size_changed)
 
-	if enable_webcam:
-		_camera_source.setup(_mat)
+	_update_webcam_state()
 
 func _unhandled_input(event: InputEvent) -> void:
 	_input_controller.handle_input(event, get_tree())
@@ -101,7 +101,8 @@ func _exit_tree() -> void:
 	_camera_source.shutdown()
 
 func _process(delta: float) -> void:
-	if enable_webcam:
+	_update_webcam_state()
+	if _webcam_started:
 		_camera_source.process(delta)
 	camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
 
@@ -122,3 +123,11 @@ func _configure_components() -> void:
 	webcam_adapter.csi_camera_name = csi_camera_name
 	webcam_adapter.webcam_fit_mode = webcam_fit_mode
 	webcam_adapter.flip_webcam_horizontal = flip_webcam_horizontal
+
+func _update_webcam_state() -> void:
+	if enable_webcam and not _webcam_started:
+		_camera_source.setup(_mat)
+		_webcam_started = true
+	elif not enable_webcam and _webcam_started:
+		_camera_source.shutdown()
+		_webcam_started = false
