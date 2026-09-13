@@ -16,7 +16,7 @@ var webcam_y_texture: CameraTexture
 var webcam_cbcr_texture: CameraTexture
 var current_feed: CameraFeed
 var _feed_last_attempt: Dictionary = {}
-var _owned_feed_ids: Dictionary = {}
+var _current_feed_owned: bool = false
 var _feed_retry_timer: float = 0.0
 var _last_webcam_aspect: float = -1.0
 var _last_datatype: int = -1
@@ -78,8 +78,10 @@ func shutdown() -> void:
 	if current_feed != null and current_feed.format_changed.is_connected(_update_feed_mode):
 		current_feed.format_changed.disconnect(_update_feed_mode)
 	if current_feed != null:
-		_deactivate_owned_feed(current_feed)
+		if _current_feed_owned:
+			current_feed.set_active(false)
 		current_feed = null
+	_current_feed_owned = false
 	if _csi_provider != null:
 		_csi_provider.stop()
 		_csi_provider = null
@@ -92,7 +94,6 @@ func shutdown() -> void:
 	webcam_cbcr_texture = null
 	_material = null
 	_feed_last_attempt.clear()
-	_owned_feed_ids.clear()
 	_feed_retry_timer = 0.0
 	_last_webcam_aspect = -1.0
 	_last_datatype = -1
@@ -158,12 +159,14 @@ func _activate_feed() -> void:
 			candidates.append(feed)
 
 	var target_feed: CameraFeed = null
+	var target_feed_owned := false
 	for feed in candidates:
 		if feed == null:
 			continue
 		var feed_id := feed.get_id()
 		if feed.is_active():
 			target_feed = feed
+			target_feed_owned = (feed == current_feed and _current_feed_owned)
 			break
 		var last_attempt: int = _feed_last_attempt.get(feed_id, -100000)
 		if now - last_attempt < 3000:
@@ -172,19 +175,21 @@ func _activate_feed() -> void:
 		_select_feed_format(feed)
 		feed.set_active(true)
 		if feed.is_active():
-			_owned_feed_ids[feed_id] = true
 			target_feed = feed
+			target_feed_owned = true
 			break
 
 	if target_feed == null:
 		return
 
 	var previous_feed := current_feed
+	var previous_feed_owned := _current_feed_owned
 	if current_feed != null and current_feed != target_feed:
 		if current_feed.format_changed.is_connected(_update_feed_mode):
 			current_feed.format_changed.disconnect(_update_feed_mode)
 
 	current_feed = target_feed
+	_current_feed_owned = target_feed_owned
 	if not current_feed.format_changed.is_connected(_update_feed_mode):
 		current_feed.format_changed.connect(_update_feed_mode)
 
@@ -207,8 +212,8 @@ func _activate_feed() -> void:
 		_material.set_shader_parameter("webcam_fit_mode", webcam_fit_mode)
 		_update_feed_mode()
 
-	if previous_feed != null and previous_feed != current_feed:
-		_deactivate_owned_feed(previous_feed)
+	if previous_feed != null and previous_feed != current_feed and previous_feed_owned:
+		previous_feed.set_active(false)
 
 func _is_csi_feed(feed: CameraFeed) -> bool:
 	if feed == null:
@@ -235,11 +240,3 @@ func _update_feed_mode() -> void:
 			_material.set_shader_parameter("webcam_mode", 2)
 		else:
 			_material.set_shader_parameter("webcam_mode", 1)
-
-func _deactivate_owned_feed(feed: CameraFeed) -> void:
-	if feed == null:
-		return
-	var feed_id := feed.get_id()
-	if _owned_feed_ids.get(feed_id, false):
-		feed.set_active(false)
-		_owned_feed_ids.erase(feed_id)
