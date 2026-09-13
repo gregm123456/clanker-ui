@@ -38,7 +38,7 @@ Short answer: **partially, but not safely yet**.
 
 ## Can the two features be developed in separate forks and merged?
 
-## Verdict
+### Verdict
 
 - **If done immediately without preparatory refactor:** high chance of painful conflicts and regressions.
 - **If preceded by a small “seam creation” pass:** parallel development becomes realistic.
