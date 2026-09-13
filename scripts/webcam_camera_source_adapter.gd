@@ -24,6 +24,7 @@ var _material: ShaderMaterial
 var _csi_provider: CsiCameraProvider
 var _did_connect_feed_added: bool = false
 var _did_connect_feeds_updated: bool = false
+var _did_enable_feed_monitoring: bool = false
 
 func setup(material: ShaderMaterial) -> void:
 	_material = material
@@ -31,6 +32,7 @@ func setup(material: ShaderMaterial) -> void:
 		return
 
 	CameraServer.set_monitoring_feeds(true)
+	_did_enable_feed_monitoring = true
 	if not CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.connect(_on_camera_feed_event)
 		_did_connect_feed_added = true
@@ -66,6 +68,8 @@ func shutdown() -> void:
 		CameraServer.camera_feed_added.disconnect(_on_camera_feed_event)
 	if _did_connect_feeds_updated and CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feeds_updated.disconnect(_on_camera_feed_event)
+	if _did_enable_feed_monitoring:
+		CameraServer.set_monitoring_feeds(false)
 	if current_feed != null and current_feed.format_changed.is_connected(_update_feed_mode):
 		current_feed.format_changed.disconnect(_update_feed_mode)
 	if current_feed != null:
@@ -84,6 +88,7 @@ func shutdown() -> void:
 	_last_datatype = -1
 	_did_connect_feed_added = false
 	_did_connect_feeds_updated = false
+	_did_enable_feed_monitoring = false
 
 func _setup_csi_camera() -> bool:
 	_csi_provider = CsiCameraProviderScript.new()
