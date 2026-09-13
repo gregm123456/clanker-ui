@@ -22,6 +22,8 @@ var _last_webcam_aspect: float = -1.0
 var _last_datatype: int = -1
 var _material: ShaderMaterial
 var _csi_provider: CsiCameraProvider
+var _did_connect_feed_added: bool = false
+var _did_connect_feeds_updated: bool = false
 
 func setup(material: ShaderMaterial) -> void:
 	_material = material
@@ -31,8 +33,10 @@ func setup(material: ShaderMaterial) -> void:
 	CameraServer.set_monitoring_feeds(true)
 	if not CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.connect(_on_camera_feed_event)
+		_did_connect_feed_added = true
 	if not CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feeds_updated.connect(_on_camera_feed_event)
+		_did_connect_feeds_updated = true
 	_activate_feed()
 
 func process(delta: float) -> void:
@@ -58,9 +62,9 @@ func process(delta: float) -> void:
 				_material.set_shader_parameter("webcam_aspect", aspect)
 
 func shutdown() -> void:
-	if CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
+	if _did_connect_feed_added and CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feed_added.disconnect(_on_camera_feed_event)
-	if CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
+	if _did_connect_feeds_updated and CameraServer.camera_feeds_updated.is_connected(_on_camera_feed_event):
 		CameraServer.camera_feeds_updated.disconnect(_on_camera_feed_event)
 	if current_feed != null and current_feed.format_changed.is_connected(_update_feed_mode):
 		current_feed.format_changed.disconnect(_update_feed_mode)
@@ -78,6 +82,8 @@ func shutdown() -> void:
 	_feed_retry_timer = 0.0
 	_last_webcam_aspect = -1.0
 	_last_datatype = -1
+	_did_connect_feed_added = false
+	_did_connect_feeds_updated = false
 
 func _setup_csi_camera() -> bool:
 	_csi_provider = CsiCameraProviderScript.new()
@@ -142,8 +148,6 @@ func _activate_feed() -> void:
 			continue
 		var feed_id := feed.get_id()
 		if feed.is_active():
-			if current_feed == feed or _owned_feed_ids.get(feed_id, false):
-				_owned_feed_ids[feed_id] = true
 			target_feed = feed
 			break
 		var last_attempt: int = _feed_last_attempt.get(feed_id, -100000)
