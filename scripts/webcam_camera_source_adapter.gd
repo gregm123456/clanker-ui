@@ -157,7 +157,7 @@ func _activate_feed() -> void:
 	for feed in candidates:
 		if feed == null:
 			continue
-		var feed_id := feed.get_id()
+		var feed_id: int = feed.get_id()
 		if _pending_deactivation_feed_ids.get(feed_id, false):
 			continue
 		if feed.is_active():
