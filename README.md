@@ -20,8 +20,18 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
 
 - `spinning_cube.gd` now acts as a thin scene coordinator.
 - `scripts/spinning_cube_input_controller.gd` owns keyboard input and window/mouse mode toggles.
-- `scripts/spinning_cube_movement_controller.gd` owns tumbling, planar movement, and wraparound behavior.
+- `scripts/spinning_cube_movement_controller.gd` owns tumbling, full 3D movement integration (velocity + acceleration), and bounds strategy evaluation.
+- `scripts/spinning_cube_bounds_strategy.gd` provides pluggable bounds modes (none, 2D viewport wrap, 3D volume wrap/clamp).
 - `scripts/webcam_camera_source_adapter.gd` owns webcam source selection and runtime updates while preserving the existing `CsiCameraProvider` and `CameraServer` paths.
+
+## World axis and movement conventions
+
+- **World axes**: `+X` = right, `+Y` = up, `+Z` = toward camera (default camera forward is `-Z`).
+- **Movement vectors** (`move_velocity`, `move_acceleration`) are interpreted in **world space**, not camera-relative space.
+- **Bounds modes**:
+  - `2D Viewport Wrap` evaluates camera-relative X/Y viewport extents.
+  - `3D Volume Bounds` evaluates world-space bounds, intended to align with physical installation geometry (`InstallationGeometry` resource) and supports both wrap and hard-wall clamp behavior.
+- **Determinism path**: enable `use_fixed_step_movement` to run motion integration in `_physics_process` for fixed-step updates.
 
 ## Run (development)
 

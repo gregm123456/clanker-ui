@@ -54,6 +54,6 @@ fov = 65.0
 mesh = SubResource("BoxMesh_1")
 script = ExtResource("1_cube_script")
 tumble_speed = Vector3(0.7, 0.7, 0.0)
-move_velocity = Vector2(0.5, 1.0)
+move_velocity = Vector3(0.5, 1.0, 0.0)
 wrap_margin = 0.3
 prefer_csi_camera = true
