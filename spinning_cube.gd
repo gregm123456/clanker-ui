@@ -3,9 +3,7 @@ extends MeshInstance3D
 const SpinningCubeInputControllerScript = preload("res://scripts/spinning_cube_input_controller.gd")
 const SpinningCubeMovementControllerScript = preload("res://scripts/spinning_cube_movement_controller.gd")
 const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_source_adapter.gd")
-const MeshCalibrationModelScript = preload("res://scripts/mesh_calibration_model.gd")
-const MeshSyncServiceScript = preload("res://scripts/mesh_sync_service.gd")
-const TransformSyncSchemaScript = preload("res://scripts/transform_sync_schema.gd")
+const SpinningCubeMeshSyncControllerScript = preload("res://scripts/spinning_cube_mesh_sync_controller.gd")
 
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -63,9 +61,7 @@ var _mat: ShaderMaterial
 var _input_controller = SpinningCubeInputControllerScript.new()
 var _movement_controller = SpinningCubeMovementControllerScript.new()
 var _camera_source = WebcamCameraSourceAdapterScript.new()
-var _mesh_sync_service = MeshSyncServiceScript.new()
-var _transform_schema = TransformSyncSchemaScript.new()
-var _owns_default_calibration_model: bool = false
+var _mesh_sync_controller = SpinningCubeMeshSyncControllerScript.new()
 var _webcam_started: bool = false
 
 func _ready() -> void:
@@ -93,7 +89,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_viewport_size_changed() -> void:
 	camera = _movement_controller.handle_viewport_size_changed(self, camera, get_viewport())
-	_publish_calibration()
+	_mesh_sync_controller.handle_viewport_size_changed(get_viewport())
 
 func _setup_material() -> void:
 	var base_mat := get_active_material(0)
@@ -111,21 +107,19 @@ func _setup_material() -> void:
 
 func _find_camera() -> void:
 	camera = get_viewport().get_camera_3d()
-	_seed_default_calibration_from_camera()
-	_publish_calibration()
+	_mesh_sync_controller.set_camera(camera)
 
 func _exit_tree() -> void:
 	_camera_source.shutdown()
 	_webcam_started = false
-	if mesh_sync_enabled:
-		_mesh_sync_service.set_peer_online(mesh_peer_id, false)
+	_mesh_sync_controller.shutdown()
 
 func _process(delta: float) -> void:
 	_update_webcam_state()
 	if _webcam_started:
 		_camera_source.process(delta)
 	camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
-	_publish_transform_state()
+	_mesh_sync_controller.process_transform(self)
 
 func _configure_components() -> void:
 	_input_controller.hide_mouse_cursor = hide_mouse_cursor
@@ -154,116 +148,13 @@ func _update_webcam_state() -> void:
 		_webcam_started = false
 
 func _configure_mesh_sync() -> void:
-	if not mesh_sync_enabled:
-		return
-
-	if calibration_model == null:
-		calibration_model = MeshCalibrationModelScript.new()
-		calibration_model.node_id = mesh_node_id
-		_owns_default_calibration_model = true
-
-	_mesh_sync_service.local_peer_id = mesh_peer_id
-	if not _mesh_sync_service.calibration_updated.is_connected(_on_calibration_updated):
-		_mesh_sync_service.calibration_updated.connect(_on_calibration_updated)
-	if not _mesh_sync_service.shared_object_spawned.is_connected(_on_shared_object_spawned):
-		_mesh_sync_service.shared_object_spawned.connect(_on_shared_object_spawned)
-	if not _mesh_sync_service.shared_object_transform_updated.is_connected(_on_shared_object_transform_updated):
-		_mesh_sync_service.shared_object_transform_updated.connect(_on_shared_object_transform_updated)
-	if not _mesh_sync_service.shared_object_despawned.is_connected(_on_shared_object_despawned):
-		_mesh_sync_service.shared_object_despawned.connect(_on_shared_object_despawned)
-
-	_seed_default_calibration_from_camera()
-	_publish_object_descriptor()
-	_publish_calibration()
-	_mesh_sync_service.set_peer_online(mesh_peer_id, true)
-
-func _seed_default_calibration_from_camera() -> void:
-	if not _owns_default_calibration_model or calibration_model == null or camera == null:
-		return
-
-	calibration_model.camera_offset = camera.transform
-
-func _publish_object_descriptor() -> void:
-	if not mesh_sync_enabled:
-		return
-
-	_mesh_sync_service.publish_object_spawn(shared_object_id, {
-		"authority": "single_owner",
-		"kind": "mesh_instance",
-		"capabilities": PackedStringArray(["shape", "texture", "static_image", "text", "audio"]),
-		"render_config": {
-			"camera_texture_source": "local_only",
-			"shader": "cube_shader",
-			"mesh_type": "box"
-		},
-		"audio_config": {},
-		"media_streams": []
-	})
-
-func _publish_calibration() -> void:
-	if not mesh_sync_enabled or calibration_model == null:
-		return
-
-	if calibration_model.node_id.is_empty():
-		calibration_model.node_id = mesh_node_id
-
-	var vp := get_viewport()
-	if vp != null:
-		var visible_rect_size := vp.get_visible_rect().size
-		calibration_model.viewport_size = Vector2i(int(visible_rect_size.x), int(visible_rect_size.y))
-
-	_mesh_sync_service.publish_calibration(calibration_model)
-
-func _publish_transform_state() -> void:
-	if not mesh_sync_enabled:
-		return
-
-	_mesh_sync_service.publish_object_transform(
+	calibration_model = _mesh_sync_controller.configure(
+		self,
+		camera,
+		get_viewport(),
+		mesh_sync_enabled,
+		mesh_node_id,
+		mesh_peer_id,
 		shared_object_id,
-		_transform_schema.serialize_transform(shared_object_id, mesh_peer_id, global_transform)
+		calibration_model
 	)
-
-func _on_calibration_updated(node_id: String, calibration: MeshCalibrationModel) -> void:
-	if node_id != mesh_node_id or calibration == null or camera == null:
-		return
-
-	if (
-		calibration.camera_offset == Transform3D.IDENTITY
-		and calibration.physical_position == Vector3.ZERO
-		and calibration.physical_rotation_degrees == Vector3.ZERO
-	):
-		return
-
-	var physical_rotation_radians := Vector3(
-		deg_to_rad(calibration.physical_rotation_degrees.x),
-		deg_to_rad(calibration.physical_rotation_degrees.y),
-		deg_to_rad(calibration.physical_rotation_degrees.z)
-	)
-	var physical_transform := Transform3D(
-		Basis.from_euler(physical_rotation_radians),
-		calibration.physical_position
-	)
-	camera.global_transform = physical_transform * calibration.camera_offset
-
-func _on_shared_object_spawned(object_id: String, descriptor: Dictionary) -> void:
-	if object_id != shared_object_id:
-		return
-
-	visible = bool(descriptor.get("visible", true))
-
-func _on_shared_object_transform_updated(object_id: String, transform_state: Dictionary) -> void:
-	if object_id != shared_object_id:
-		return
-
-	if String(transform_state.get("owner_peer_id", "")) == mesh_peer_id:
-		return
-
-	var position: Vector3 = transform_state.get("position", global_position)
-	var rotation: Quaternion = transform_state.get("rotation", Quaternion.IDENTITY)
-	global_transform = Transform3D(Basis(rotation), position)
-
-func _on_shared_object_despawned(object_id: String) -> void:
-	if object_id != shared_object_id:
-		return
-
-	visible = false
