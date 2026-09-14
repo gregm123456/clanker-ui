@@ -8,8 +8,8 @@ var wrap_margin: float = 1.6
 
 func randomize_speed_and_velocity() -> void:
 	tumble_speed = Vector3(
-		tumble_speed.x * randf_range(0.01, 1.0),
-		tumble_speed.y * randf_range(0.01, 1.0),
+		tumble_speed.x * randf_range(0.5, 2.0),
+		tumble_speed.y * randf_range(0.5, 2.0),
 		tumble_speed.z * randf_range(0.01, 2.0)
 	)
 	move_velocity = Vector2(

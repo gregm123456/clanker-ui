@@ -113,7 +113,10 @@ void fragment() {
 			}
 		}
 
-		if (webcam_flip_h) {
+		// Mirror the negative-axis face in each opposite pair:
+		// front/back, right/left, and top/bottom.
+		bool flip_for_face = (face_id == 2 || face_id == 3 || face_id == 5);
+		if (webcam_flip_h && flip_for_face) {
 			cam_uv.x = 1.0 - cam_uv.x;
 		}
 
