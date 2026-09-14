@@ -16,6 +16,40 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
   - `M`: Toggle mouse pointer visibility.
   - `Escape`: Quit application.
 
+## ⚠️ Required after every `git pull` / merge: refresh the Godot class cache
+
+Godot caches all `class_name` script registrations in
+`.godot/global_script_class_cache.cfg`. This cache is **not** rebuilt
+automatically when you run the project from the command line
+(`Godot --main-scene res://main.tscn`) — it's only rebuilt when the editor
+itself does a project scan.
+
+If you pull/merge a change that adds, removes, or renames a `class_name`
+script (e.g. `MeshCalibrationModel`, `InstallationGeometry`) and the cache is
+stale, `spinning_cube.gd` fails to compile with errors such as:
+
+```
+SCRIPT ERROR: Parse Error: Could not find type "MeshCalibrationModel" in the current scope.
+ERROR: Failed to load script "res://spinning_cube.gd" with error "Parse error".
+```
+
+The symptom in the running app is a **static, non-spinning cube with no
+camera image** — the whole `spinning_cube.gd` script silently failed to load,
+so nothing it controls runs.
+
+**Fix**: run this once after pulling/merging (and any time you add/rename a
+`class_name` script yourself):
+
+```sh
+scripts/refresh_godot_class_cache.sh
+```
+
+This runs a headless editor pass (`Godot --headless --editor --quit-after 20`)
+that rescans the project and rewrites `.godot/global_script_class_cache.cfg`.
+Set `GODOT_BIN=/path/to/Godot` if your Godot binary isn't at the default macOS
+location or on `PATH`. Make this a routine step in your pull workflow — it's
+cheap and safe to run even when nothing changed.
+
 ## Runtime architecture
 
 - `spinning_cube.gd` now acts as a thin scene coordinator.
