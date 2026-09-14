@@ -20,12 +20,106 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
 
 - `spinning_cube.gd` now acts as a thin scene coordinator.
 - `scripts/spinning_cube_input_controller.gd` owns keyboard input and window/mouse mode toggles.
-- `scripts/spinning_cube_movement_controller.gd` owns tumbling, planar movement, and wraparound behavior.
+- `scripts/spinning_cube_movement_controller.gd` owns tumbling, full 3D movement integration (velocity + acceleration), and bounds strategy evaluation.
+- `scripts/spinning_cube_bounds_strategy.gd` provides pluggable bounds modes (none, 2D viewport wrap, 3D volume wrap/clamp).
 - `scripts/webcam_camera_source_adapter.gd` owns webcam source selection and runtime updates while preserving the existing `CsiCameraProvider` and `CameraServer` paths.
 - `scripts/spinning_cube_mesh_sync_controller.gd` owns mesh-sync orchestration and keeps `spinning_cube.gd` limited to wiring scene-level dependencies.
 - `scripts/mesh_sync_service.gd` now owns typed shared-scene events for calibration, object lifecycle, and transform updates so scene nodes never parse transport payloads directly.
 - `scripts/mesh_calibration_model.gd` stores per-node physical placement, orientation, viewport sizing, and camera offset data in one explicit resource model.
 - `scripts/transform_sync_schema.gd` defines the versioned transform payload used for shared-scene state sync while keeping camera frame acquisition local-only.
+
+## World axis and movement conventions
+
+- **World axes**: `+X` = right, `+Y` = up, `+Z` = toward camera (default camera forward is `-Z`).
+- **Movement vectors** (`move_velocity`, `move_acceleration`) are interpreted in **world space**, not camera-relative space.
+- **Bounds modes**:
+  - `2D Viewport Wrap` evaluates camera-relative X/Y viewport extents.
+  - `3D Volume Bounds` evaluates world-space bounds, intended to align with physical installation geometry (`InstallationGeometry` resource) and supports both wrap and hard-wall clamp behavior.
+- **Determinism path**: enable `use_fixed_step_movement` to run motion integration in `_physics_process` for fixed-step updates.
+
+## Configure the 3D space and objects
+
+The 3D space is the scene made from `Node3D` nodes. In the editor, open `main.tscn` and
+select a node in the Scene dock. Set its properties in the Inspector, or edit the same
+values in the scene file when making repeatable deployments.
+
+### Space parameters
+
+These nodes define the space in the default scene:
+
+| Node | Parameters to set | Effect |
+| --- | --- | --- |
+| `Camera3D` | `Transform > Position`, `Transform > Rotation`, `Fov` | Defines the viewer, camera angle, distance, and perspective. The default camera is at `(0, 0, 4)`, looking along `-Z`, with a `65` degree field of view. |
+| `WorldEnvironment` | `Environment > Background`, ambient light, tonemapping, glow | Defines the background and global lighting response. |
+| `DirectionalLight3D` and `DirectionalLight3D_Fill` | `Transform > Rotation`, `Light Color`, `Light Energy`, shadows | Defines the direction, color, and strength of the scene lights. |
+| `SpinningCube` | `Transform > Position`, `Transform > Rotation`, `Mesh` | Defines the object's starting transform and visible geometry. |
+
+For a different object, add a `Node3D` or `MeshInstance3D` under `Main`, assign a mesh,
+and set its transform. A `Node3D` transform is composed of:
+
+- **Position**: local translation `(x, y, z)`. With the default `Main` root at the origin,
+  this is also the object's initial world position.
+- **Rotation**: local Euler angles around X, Y, and Z. Godot's Inspector displays degrees;
+  GDScript rotation methods use radians.
+- **Scale**: local size multiplier `(x, y, z)`. Keep the scale at `(1, 1, 1)` when the
+  mesh's own dimensions should control its size.
+
+The `BoxMesh` size is separate from the node transform. For example, set `BoxMesh > Size`
+to `(4.25, 4.25, 0.05)` to change the mesh dimensions, or set `SpinningCube > Transform
+> Scale` to change the whole object including its children.
+
+### Object movement and rotation
+
+Select `SpinningCube` and set these exported properties:
+
+| Property | Type and units | Meaning |
+| --- | --- | --- |
+| `tumble_speed` | `Vector3`, radians/second | Continuous rotation speed around X, Y, and Z. For example `(0, 1.0, 0)` rotates around Y only. A negative value reverses that axis. |
+| `move_velocity` | `Vector3`, world units/second | Initial movement velocity on X, Y, and Z. For example `(0.5, 1.0, 0)` moves right and up without moving toward or away from the camera. |
+| `move_acceleration` | `Vector3`, world units/second squared | Added to velocity every update. Use `(0, 0, 0)` for constant velocity. |
+| `use_fixed_step_movement` | Boolean | Updates movement in `_physics_process` for more repeatable fixed-step motion. |
+| `enable_wraparound` | Boolean | Enables the selected boundary strategy. |
+| `bounds_mode` | `None`, `2D Viewport Wrap`, or `3D Volume Bounds` | Chooses whether the object has no bounds, wraps against the camera-relative viewport, or uses a world-space volume. |
+| `wrap_margin` | World units | Extra distance beyond the visible 2D viewport before the object wraps. It does not change 3D volume bounds. |
+| `bounds_behavior` | `Wrap` or `Hard Wall Clamp` | For `3D Volume Bounds`, either teleports the object to the opposite side or clamps it at the wall. |
+| `bounds_volume_center` | `Vector3`, world units | Center of the 3D bounds volume when no `InstallationGeometry` resource is assigned. |
+| `bounds_volume_half_extents` | `Vector3`, world units | Half-width, half-height, and half-depth of the 3D bounds volume. The full volume is `center +/- half_extents`. |
+
+The runtime applies movement each update in this order:
+
+1. Rotate the object using `tumble_speed * delta` around X, Y, and Z.
+2. Update velocity using `move_velocity += move_acceleration * delta`.
+3. Translate the object using `position += move_velocity * delta`.
+4. Apply the selected viewport or 3D-volume bounds rule.
+
+The object starts with the Position and Rotation values saved in the scene, then movement
+changes its transform while the application runs. The current `spinning_cube.gd` also
+randomizes `tumble_speed` and `move_velocity` during startup. To make Inspector values
+remain exact, remove or disable that `randomize_speed_and_velocity()` call before relying
+on fixed motion values.
+
+### Example scene values
+
+The following is the relevant shape of a `.tscn` configuration. `Vector3` values use
+`(x, y, z)` order, and rotation values written in a scene file use radians:
+
+```ini
+[node name="SpinningCube" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0, 0)
+rotation = Vector3(0, 0, 0)
+scale = Vector3(1, 1, 1)
+tumble_speed = Vector3(0, 0.7, 0)
+move_velocity = Vector3(0.5, 1.0, 0)
+move_acceleration = Vector3(0, 0, 0)
+enable_wraparound = true
+bounds_mode = 1
+wrap_margin = 0.3
+```
+
+For a 3D installation volume, use `bounds_mode = 2`, set `bounds_behavior` to `0` for
+wrap or `1` for hard-wall clamping, and configure `bounds_volume_center` and
+`bounds_volume_half_extents`. An `InstallationGeometry` resource can be assigned instead
+when the same physical bounds should be shared by multiple objects.
 
 ## Run (development)
 

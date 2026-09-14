@@ -8,14 +8,38 @@ const SpinningCubeMeshSyncControllerScript = preload("res://scripts/spinning_cub
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
 
-## Velocity of the cube moving across the screen (X = horizontal, Y = vertical)
-@export var move_velocity: Vector2 = Vector2(2.2, 1.4)
+## Velocity of the cube in world space (+X = right, +Y = up, +Z = toward camera)
+@export var move_velocity: Vector3 = Vector3(2.2, 1.4, 0.0)
+
+## Constant acceleration in world space, applied to movement velocity each update
+@export var move_acceleration: Vector3 = Vector3.ZERO
+
+## Compatibility adapter for legacy 2D tuning (X/Y only)
+@export var use_legacy_2d_velocity_adapter: bool = false
+@export var legacy_move_velocity_2d: Vector2 = Vector2(2.2, 1.4)
 
 ## Enable or disable screen boundary wraparound
 @export var enable_wraparound: bool = true
 
 ## Margin beyond viewport edge before wrapping (in world units)
 @export var wrap_margin: float = 1.6
+
+## Bounds mode strategy:
+## 0 = none, 1 = 2D camera-relative wrap, 2 = 3D world-volume bounds
+@export_enum("None:0", "2D Viewport Wrap:1", "3D Volume Bounds:2") var bounds_mode: int = 1
+
+## 3D world-volume bounds behavior:
+## 0 = wrap to opposite wall, 1 = hard-wall clamp
+@export_enum("Wrap:0", "Hard Wall Clamp:1") var bounds_behavior: int = 0
+
+## Optional physical installation geometry for 3D bounds evaluation.
+## If unset, bounds_volume_center/half_extents are used directly.
+@export var installation_geometry: InstallationGeometry
+@export var bounds_volume_center: Vector3 = Vector3.ZERO
+@export var bounds_volume_half_extents: Vector3 = Vector3(8.0, 4.5, 4.0)
+
+## Use fixed-step movement updates for deterministic motion progression.
+@export var use_fixed_step_movement: bool = false
 
 ## Enable live webcam feed on the second face (+X)
 @export var enable_webcam: bool = true
@@ -118,16 +142,32 @@ func _process(delta: float) -> void:
 	_update_webcam_state()
 	if _webcam_started:
 		_camera_source.process(delta)
-	camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
+	if not use_fixed_step_movement:
+		camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
 	_mesh_sync_controller.process_transform(self)
+
+func _physics_process(delta: float) -> void:
+	if use_fixed_step_movement:
+		camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
 
 func _configure_components() -> void:
 	_input_controller.hide_mouse_cursor = hide_mouse_cursor
 
 	_movement_controller.tumble_speed = tumble_speed
 	_movement_controller.move_velocity = move_velocity
+	_movement_controller.move_acceleration = move_acceleration
+	if use_legacy_2d_velocity_adapter:
+		_movement_controller.set_legacy_planar_velocity(legacy_move_velocity_2d)
 	_movement_controller.enable_wraparound = enable_wraparound
 	_movement_controller.wrap_margin = wrap_margin
+	_movement_controller.bounds_mode = bounds_mode
+	_movement_controller.bounds_behavior = bounds_behavior
+	if installation_geometry != null:
+		_movement_controller.bounds_volume_center = installation_geometry.world_bounds_center
+		_movement_controller.bounds_volume_half_extents = installation_geometry.world_bounds_half_extents
+	else:
+		_movement_controller.bounds_volume_center = bounds_volume_center
+		_movement_controller.bounds_volume_half_extents = bounds_volume_half_extents
 
 	var webcam_adapter = _camera_source
 	webcam_adapter.webcam_feed_index = webcam_feed_index
