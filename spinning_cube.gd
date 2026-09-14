@@ -3,6 +3,7 @@ extends MeshInstance3D
 const SpinningCubeInputControllerScript = preload("res://scripts/spinning_cube_input_controller.gd")
 const SpinningCubeMovementControllerScript = preload("res://scripts/spinning_cube_movement_controller.gd")
 const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_source_adapter.gd")
+const SpinningCubeMeshSyncControllerScript = preload("res://scripts/spinning_cube_mesh_sync_controller.gd")
 
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -71,12 +72,20 @@ const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_sou
 ## Automatically hide mouse cursor (ideal for kiosk / fullscreen runs)
 @export var hide_mouse_cursor: bool = true
 
+## Shared scene mesh sync identifiers and calibration resource
+@export var mesh_sync_enabled: bool = true
+@export var mesh_node_id: String = "local_display"
+@export var mesh_peer_id: String = "local"
+@export var shared_object_id: String = "spinning_cube"
+@export var calibration_model: MeshCalibrationModel
+
 var camera: Camera3D
 
 var _mat: ShaderMaterial
 var _input_controller = SpinningCubeInputControllerScript.new()
 var _movement_controller = SpinningCubeMovementControllerScript.new()
 var _camera_source = WebcamCameraSourceAdapterScript.new()
+var _mesh_sync_controller = SpinningCubeMeshSyncControllerScript.new()
 var _webcam_started: bool = false
 
 func _ready() -> void:
@@ -96,6 +105,7 @@ func _ready() -> void:
 	if vp != null and not vp.size_changed.is_connected(_on_viewport_size_changed):
 		vp.size_changed.connect(_on_viewport_size_changed)
 
+	_configure_mesh_sync()
 	_update_webcam_state()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -103,6 +113,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_viewport_size_changed() -> void:
 	camera = _movement_controller.handle_viewport_size_changed(self, camera, get_viewport())
+	_mesh_sync_controller.handle_viewport_size_changed(get_viewport())
 
 func _setup_material() -> void:
 	var base_mat := get_active_material(0)
@@ -120,10 +131,12 @@ func _setup_material() -> void:
 
 func _find_camera() -> void:
 	camera = get_viewport().get_camera_3d()
+	_mesh_sync_controller.set_camera(camera)
 
 func _exit_tree() -> void:
 	_camera_source.shutdown()
 	_webcam_started = false
+	_mesh_sync_controller.shutdown()
 
 func _process(delta: float) -> void:
 	_update_webcam_state()
@@ -131,6 +144,7 @@ func _process(delta: float) -> void:
 		_camera_source.process(delta)
 	if not use_fixed_step_movement:
 		camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
+	_mesh_sync_controller.process_transform(self)
 
 func _physics_process(delta: float) -> void:
 	if use_fixed_step_movement:
@@ -172,3 +186,15 @@ func _update_webcam_state() -> void:
 	elif not enable_webcam and _webcam_started:
 		_camera_source.shutdown()
 		_webcam_started = false
+
+func _configure_mesh_sync() -> void:
+	calibration_model = _mesh_sync_controller.configure(
+		self,
+		camera,
+		get_viewport(),
+		mesh_sync_enabled,
+		mesh_node_id,
+		mesh_peer_id,
+		shared_object_id,
+		calibration_model
+	)

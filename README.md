@@ -23,6 +23,10 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
 - `scripts/spinning_cube_movement_controller.gd` owns tumbling, full 3D movement integration (velocity + acceleration), and bounds strategy evaluation.
 - `scripts/spinning_cube_bounds_strategy.gd` provides pluggable bounds modes (none, 2D viewport wrap, 3D volume wrap/clamp).
 - `scripts/webcam_camera_source_adapter.gd` owns webcam source selection and runtime updates while preserving the existing `CsiCameraProvider` and `CameraServer` paths.
+- `scripts/spinning_cube_mesh_sync_controller.gd` owns mesh-sync orchestration and keeps `spinning_cube.gd` limited to wiring scene-level dependencies.
+- `scripts/mesh_sync_service.gd` now owns typed shared-scene events for calibration, object lifecycle, and transform updates so scene nodes never parse transport payloads directly.
+- `scripts/mesh_calibration_model.gd` stores per-node physical placement, orientation, viewport sizing, and camera offset data in one explicit resource model.
+- `scripts/transform_sync_schema.gd` defines the versioned transform payload used for shared-scene state sync while keeping camera frame acquisition local-only.
 
 ## World axis and movement conventions
 
