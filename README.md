@@ -128,6 +128,21 @@ The exported values remain the editor-time fallback when a config value is absen
 - `scripts/mesh_sync_service.gd` now owns typed shared-scene events for calibration, object lifecycle, and transform updates so scene nodes never parse transport payloads directly.
 - `scripts/mesh_calibration_model.gd` stores per-node physical placement, orientation, viewport sizing, and camera offset data in one explicit resource model.
 - `scripts/transform_sync_schema.gd` defines the versioned transform payload used for shared-scene state sync while keeping camera frame acquisition local-only.
+- `scripts/peer_address_book.gd` lazily resolves configured IPv4 addresses and hostnames, including Tailscale names, with cached results and retry backoff.
+- `scripts/udp_mesh_transport.gd` provides versioned JSON-over-UDP broadcast, unicast, or combined transport on the configured UDP port.
+- `scripts/mesh_network_bridge.gd` connects the generic UDP envelope to `MeshSyncService`, forwards local spawn/calibration/transform updates, applies remote messages under an echo-prevention guard, and tracks peer heartbeat timeouts.
+
+The Phase 3 UDP envelope is:
+
+```json
+{"version":1,"type":"transform|calibration|spawn|despawn|heartbeat","sender_peer_id":"peer-id","payload":{}}
+```
+
+Transform payloads use `TransformSyncSchema`. Calibration payloads use the JSON-safe
+dictionary form of `MeshCalibrationModel`; spawn and despawn payloads include `object_id`.
+Unknown message types, unsupported versions, malformed JSON, and invalid payload shapes are
+dropped without terminating the receiver. The network bridge is generic and does not render
+remote objects; Phase 4 owns that scene behavior.
 
 ## World axis and movement conventions
 

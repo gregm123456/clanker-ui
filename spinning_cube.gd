@@ -6,6 +6,8 @@ const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_sou
 const SpinningCubeMeshSyncControllerScript = preload("res://scripts/spinning_cube_mesh_sync_controller.gd")
 const InstallationConfigScript = preload("res://scripts/installation_config.gd")
 const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
+const MeshNetworkBridgeScript = preload("res://scripts/mesh_network_bridge.gd")
+const RemoteObjectRendererScript = preload("res://scripts/remote_object_renderer.gd")
 
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -89,6 +91,8 @@ var _input_controller = SpinningCubeInputControllerScript.new()
 var _movement_controller = SpinningCubeMovementControllerScript.new()
 var _camera_source = WebcamCameraSourceAdapterScript.new()
 var _mesh_sync_controller = SpinningCubeMeshSyncControllerScript.new()
+var _mesh_network_bridge
+var _remote_object_renderer
 var _webcam_started: bool = false
 
 func _ready() -> void:
@@ -141,6 +145,10 @@ func _find_camera() -> void:
 func _exit_tree() -> void:
 	_camera_source.shutdown()
 	_webcam_started = false
+	if _mesh_network_bridge != null:
+		_mesh_network_bridge.shutdown()
+	if _remote_object_renderer != null:
+		_remote_object_renderer.shutdown()
 	_mesh_sync_controller.shutdown()
 
 func _process(delta: float) -> void:
@@ -150,6 +158,8 @@ func _process(delta: float) -> void:
 	if not use_fixed_step_movement:
 		camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
 	_mesh_sync_controller.process_transform(self)
+	if _remote_object_renderer != null:
+		_remote_object_renderer.process(delta)
 
 func _physics_process(delta: float) -> void:
 	if use_fixed_step_movement:
@@ -255,3 +265,25 @@ func _configure_mesh_sync() -> void:
 		shared_object_id,
 		calibration_model
 	)
+	if mesh_sync_enabled:
+		_mesh_network_bridge = MeshNetworkBridgeScript.new()
+		add_child(_mesh_network_bridge)
+		var network_error: Error = _mesh_network_bridge.configure(
+			_mesh_sync_controller.get_mesh_sync_service(),
+			installation_config.get_network_settings(),
+			installation_config.get_peers(),
+			mesh_peer_id
+		)
+		if network_error != OK:
+			print("[spinning_cube] Mesh network disabled after setup error: ", network_error)
+			_mesh_network_bridge.queue_free()
+			_mesh_network_bridge = null
+		else:
+			_mesh_sync_controller.attach_network_bridge(_mesh_network_bridge)
+		_remote_object_renderer = RemoteObjectRendererScript.new()
+		add_child(_remote_object_renderer)
+		_remote_object_renderer.configure(
+			_mesh_sync_controller.get_mesh_sync_service(),
+			shared_object_id,
+			camera
+		)

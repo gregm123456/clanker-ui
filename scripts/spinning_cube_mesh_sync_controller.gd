@@ -17,6 +17,7 @@ var _target: MeshInstance3D
 var _viewport: Viewport
 var _mesh_sync_service = MeshSyncServiceScript.new()
 var _transform_schema = TransformSyncSchemaScript.new()
+var _network_bridge
 
 func configure(target: MeshInstance3D, camera: Camera3D, viewport: Viewport, enabled_value: bool, node_id: String, peer_id: String, object_id: String, calibration: MeshCalibrationModel) -> MeshCalibrationModel:
 	_target = target
@@ -67,10 +68,21 @@ func process_transform(target: MeshInstance3D) -> void:
 	if not enabled or _target == null:
 		return
 
-	_mesh_sync_service.publish_object_transform(
-		shared_object_id,
-		_transform_schema.serialize_transform(shared_object_id, mesh_peer_id, _target.global_transform)
-	)
+	var payload := _transform_schema.serialize_transform(shared_object_id, mesh_peer_id, _target.global_transform)
+	_mesh_sync_service.publish_object_transform(shared_object_id, payload)
+	if _network_bridge != null:
+		_network_bridge.send_object_transform(payload)
+
+func get_mesh_sync_service():
+	return _mesh_sync_service
+
+func attach_network_bridge(network_bridge) -> void:
+	_network_bridge = network_bridge
+	if not enabled:
+		return
+	_publish_object_descriptor()
+	_publish_calibration()
+	process_transform(_target)
 
 func shutdown() -> void:
 	if enabled:
@@ -86,7 +98,7 @@ func _publish_object_descriptor() -> void:
 	if not enabled:
 		return
 
-	_mesh_sync_service.publish_object_spawn(shared_object_id, {
+	var descriptor := {
 		"authority": "single_owner",
 		"kind": "mesh_instance",
 		"capabilities": PackedStringArray(["shape", "texture", "static_image", "text", "audio"]),
@@ -97,7 +109,10 @@ func _publish_object_descriptor() -> void:
 		},
 		"audio_config": {},
 		"media_streams": []
-	})
+	}
+	_mesh_sync_service.publish_object_spawn(shared_object_id, descriptor)
+	if _network_bridge != null:
+		_network_bridge.send_object_spawn(shared_object_id, descriptor)
 
 func _publish_calibration() -> void:
 	if not enabled or calibration_model == null:
@@ -111,6 +126,8 @@ func _publish_calibration() -> void:
 		calibration_model.viewport_size = Vector2i(int(visible_rect_size.x), int(visible_rect_size.y))
 
 	_mesh_sync_service.publish_calibration(calibration_model)
+	if _network_bridge != null:
+		_network_bridge.send_calibration(calibration_model)
 
 func _on_calibration_updated(node_id: String, calibration: MeshCalibrationModel) -> void:
 	if node_id != mesh_node_id or calibration == null or _camera == null:

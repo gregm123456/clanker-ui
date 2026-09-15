@@ -1,0 +1,180 @@
+class_name RemoteObjectRenderer
+extends Node
+
+signal snapshot_requested(object_id, owner_peer_id)
+
+const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
+
+var _mesh_sync_service
+var _local_object_id: String = ""
+var _camera: Camera3D
+var _snapshot_callback: Callable = Callable()
+var _proxy_states: Dictionary = {}
+
+func configure(mesh_sync_service, local_object_id: String, camera: Camera3D = null) -> void:
+	_mesh_sync_service = mesh_sync_service
+	_local_object_id = local_object_id
+	_camera = camera
+	_connect_service_signals()
+
+func set_camera(camera: Camera3D) -> void:
+	_camera = camera
+
+func set_snapshot_request_callback(callback: Callable) -> void:
+	_snapshot_callback = callback
+
+func process(_delta: float) -> void:
+	if _mesh_sync_service == null:
+		return
+	for object_id_variant in _proxy_states.keys():
+		var object_id := String(object_id_variant)
+		var state: Dictionary = _proxy_states.get(object_id, {})
+		var instance: MeshInstance3D = state.get("instance")
+		if instance == null or _camera == null:
+			continue
+		var currently_visible := _is_object_visible_to_camera(instance.global_position)
+		var was_visible := bool(state.get("is_visible", false))
+		state["is_visible"] = currently_visible
+		if not was_visible and currently_visible:
+			_request_snapshot(object_id, String(state.get("owner_peer_id", "")))
+
+func shutdown() -> void:
+	_disconnect_service_signals()
+	for object_id_variant in _proxy_states.keys():
+		var object_id := String(object_id_variant)
+		var state: Dictionary = _proxy_states.get(object_id, {})
+		var instance: MeshInstance3D = state.get("instance")
+		if instance != null:
+			instance.queue_free()
+	_proxy_states.clear()
+
+func _connect_service_signals() -> void:
+	if _mesh_sync_service == null:
+		return
+	if not _mesh_sync_service.shared_object_spawned.is_connected(_on_shared_object_spawned):
+		_mesh_sync_service.shared_object_spawned.connect(_on_shared_object_spawned)
+	if not _mesh_sync_service.shared_object_transform_updated.is_connected(_on_shared_object_transform_updated):
+		_mesh_sync_service.shared_object_transform_updated.connect(_on_shared_object_transform_updated)
+	if not _mesh_sync_service.shared_object_despawned.is_connected(_on_shared_object_despawned):
+		_mesh_sync_service.shared_object_despawned.connect(_on_shared_object_despawned)
+	if not _mesh_sync_service.peer_connection_changed.is_connected(_on_peer_connection_changed):
+		_mesh_sync_service.peer_connection_changed.connect(_on_peer_connection_changed)
+
+func _disconnect_service_signals() -> void:
+	if _mesh_sync_service == null:
+		return
+	if _mesh_sync_service.shared_object_spawned.is_connected(_on_shared_object_spawned):
+		_mesh_sync_service.shared_object_spawned.disconnect(_on_shared_object_spawned)
+	if _mesh_sync_service.shared_object_transform_updated.is_connected(_on_shared_object_transform_updated):
+		_mesh_sync_service.shared_object_transform_updated.disconnect(_on_shared_object_transform_updated)
+	if _mesh_sync_service.shared_object_despawned.is_connected(_on_shared_object_despawned):
+		_mesh_sync_service.shared_object_despawned.disconnect(_on_shared_object_despawned)
+	if _mesh_sync_service.peer_connection_changed.is_connected(_on_peer_connection_changed):
+		_mesh_sync_service.peer_connection_changed.disconnect(_on_peer_connection_changed)
+
+func _on_shared_object_spawned(object_id: String, descriptor: Dictionary) -> void:
+	if object_id.is_empty() or object_id == _local_object_id:
+		return
+	var state: Dictionary = _proxy_states.get(object_id, {})
+	if state.has("instance") and state.get("instance") != null:
+		state["descriptor"] = descriptor
+		state["owner_peer_id"] = String(descriptor.get("owner_peer_id", state.get("owner_peer_id", "")))
+		return
+	var instance := _create_proxy_for_descriptor(object_id, descriptor)
+	if instance == null:
+		return
+	_proxy_states[object_id] = {
+		"instance": instance,
+		"descriptor": descriptor,
+		"owner_peer_id": String(descriptor.get("owner_peer_id", "")),
+		"is_visible": false
+	}
+
+func _on_shared_object_transform_updated(object_id: String, transform_state: Dictionary) -> void:
+	if object_id.is_empty() or object_id == _local_object_id:
+		return
+	var state: Dictionary = _proxy_states.get(object_id, {})
+	var instance: MeshInstance3D = state.get("instance")
+	if instance == null:
+		return
+	state["owner_peer_id"] = String(transform_state.get("owner_peer_id", state.get("owner_peer_id", "")))
+	var position: Vector3 = transform_state.get("position", instance.global_position)
+	var rotation: Quaternion = transform_state.get("rotation", Quaternion.IDENTITY)
+	instance.global_transform = Transform3D(Basis(rotation), position)
+
+func _on_shared_object_despawned(object_id: String) -> void:
+	if object_id.is_empty() or object_id == _local_object_id:
+		return
+	var state: Dictionary = _proxy_states.get(object_id, {})
+	var instance: MeshInstance3D = state.get("instance")
+	if instance != null:
+		instance.queue_free()
+	_proxy_states.erase(object_id)
+
+func _on_peer_connection_changed(peer_id: String, is_online: bool) -> void:
+	if is_online:
+		return
+	for object_id_variant in _proxy_states.keys():
+		var object_id := String(object_id_variant)
+		var state: Dictionary = _proxy_states.get(object_id, {})
+		if String(state.get("owner_peer_id", "")) == peer_id:
+			var instance: MeshInstance3D = state.get("instance")
+			if instance != null:
+				instance.queue_free()
+		_proxy_states.erase(object_id)
+
+func _create_proxy_for_descriptor(object_id: String, descriptor: Dictionary) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = "RemoteProxy_%s" % object_id
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = _resolve_proxy_size(descriptor)
+	instance.mesh = box_mesh
+	var material := ShaderMaterial.new()
+	material.shader = load("res://cube_shader.gdshader")
+	material.set_shader_parameter("cube_size", box_mesh.size)
+	material.set_shader_parameter("use_front_texture", false)
+	material.set_shader_parameter("webcam_mode", 0)
+	material.set_shader_parameter("webcam_fit_mode", 0)
+	material.set_shader_parameter("webcam_flip_h", true)
+	material.set_shader_parameter("webcam_aspect", 1.777777)
+	material.set_shader_parameter("webcam_texture", null)
+	material.set_shader_parameter("webcam_cbcr_texture", null)
+	material.set_shader_parameter("cube_color", Color(0.12, 0.15, 0.22, 1.0))
+	material.set_shader_parameter("border_color", Color(0.35, 0.65, 0.95, 1.0))
+	instance.material_override = material
+	if get_parent() != null:
+		get_parent().add_child(instance)
+	else:
+		add_child(instance)
+	return instance
+
+func _resolve_proxy_size(descriptor: Dictionary) -> Vector3:
+	var render_config: Dictionary = descriptor.get("render_config", {})
+	if typeof(render_config) == TYPE_DICTIONARY:
+		var candidate: Variant = render_config.get("size", null)
+		if typeof(candidate) == TYPE_ARRAY and candidate.size() >= 3:
+			return Vector3(float(candidate[0]), float(candidate[1]), float(candidate[2]))
+		candidate = render_config.get("box_size", null)
+		if typeof(candidate) == TYPE_ARRAY and candidate.size() >= 3:
+			return Vector3(float(candidate[0]), float(candidate[1]), float(candidate[2]))
+		candidate = render_config.get("scale", null)
+		if typeof(candidate) == TYPE_ARRAY and candidate.size() >= 3:
+			return Vector3(float(candidate[0]), float(candidate[1]), float(candidate[2]))
+	return Vector3(1.8, 1.8, 0.1)
+
+func _is_object_visible_to_camera(position: Vector3) -> bool:
+	if _camera == null:
+		return false
+	var camera_local := _camera.global_transform.affine_inverse() * position
+	if camera_local.z <= 0.0:
+		return false
+	var distance := maxf(absf(camera_local.z), 0.0001)
+	var frustum_size := WallGeometryCalculatorScript.frustum_size_at_distance(_camera, distance)
+	return absf(camera_local.x) <= frustum_size.x and absf(camera_local.y) <= frustum_size.y
+
+func _request_snapshot(object_id: String, owner_peer_id: String) -> void:
+	if object_id.is_empty():
+		return
+	if _snapshot_callback.is_valid():
+		_snapshot_callback.call(object_id, owner_peer_id)
+	snapshot_requested.emit(object_id, owner_peer_id)
