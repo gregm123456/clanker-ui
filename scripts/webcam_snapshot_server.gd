@@ -12,7 +12,7 @@ extends Node
 ## snapshot and retain their existing proxy appearance.
 
 const MAX_REQUEST_BYTES: int = 256
-const JPEG_QUALITY: int = 85
+const JPEG_QUALITY: float = 0.85
 const MAX_CONNECTION_AGE_SEC: float = 5.0
 
 var _server := TCPServer.new()

@@ -185,6 +185,8 @@ func _apply_runtime_configuration() -> void:
 	var config_peer_id := installation_config.get_peer_id().strip_edges()
 	if not config_peer_id.is_empty():
 		mesh_peer_id = config_peer_id
+	if not mesh_peer_id.is_empty() and shared_object_id == "spinning_cube":
+		shared_object_id = "%s_%s" % [mesh_peer_id, shared_object_id]
 
 	var wall_layout: Dictionary = installation_config.get_wall_layout()
 	if wall_layout.has("columns") and wall_layout.has("rows"):
@@ -205,7 +207,11 @@ func _apply_runtime_configuration() -> void:
 		if calibration_model == null:
 			calibration_model = MeshCalibrationModel.new()
 		calibration_model.physical_position = computed_node_offset
-		calibration_model.physical_rotation_degrees = Vector3.ZERO
+		calibration_model.physical_rotation_degrees = Vector3(
+			0.0,
+			0.0,
+			float(wall_layout.get("rotation_z_degrees", 0.0))
+		)
 		calibration_model.node_id = mesh_node_id
 
 	var camera_settings: Dictionary = installation_config.get_camera_settings()

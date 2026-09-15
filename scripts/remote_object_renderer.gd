@@ -196,7 +196,7 @@ func _is_object_visible_to_camera(position: Vector3) -> bool:
 	if _camera == null:
 		return false
 	var camera_local := _camera.global_transform.affine_inverse() * position
-	if camera_local.z <= 0.0:
+	if camera_local.z >= 0.0:
 		return false
 	var distance := maxf(absf(camera_local.z), 0.0001)
 	var frustum_size := WallGeometryCalculatorScript.frustum_size_at_distance(_camera, distance)

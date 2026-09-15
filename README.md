@@ -74,6 +74,7 @@ monitor_height_mm = 300.0
 gap_mm = 5.0
 this_node_column = 0
 this_node_row = 0
+rotation_z_degrees = 0.0
 
 [network]
 mode = broadcast
@@ -115,7 +116,10 @@ The exported values remain the editor-time fallback when a config value is absen
 > Hard requirement: all Pi nodes in the same installation must agree on the wall geometry
 > (`columns`, `rows`, `monitor_width_mm`, `monitor_height_mm`, `gap_mm`) so the shared 3D
 > world matches across screens. The per-node `this_node_column` and `this_node_row` values
-> determine each Pi's placement inside that shared wall.
+> determine each Pi's placement inside that shared wall. `rotation_z_degrees` is per-node:
+> positive values rotate the display counterclockwise in the world view, and negative values
+> rotate it clockwise. For the current pair, use `-90` on the left clockwise-rotated node and
+> `90` on the right counterclockwise-rotated node.
 
 ### One-shot remote webcam snapshots
 

@@ -30,6 +30,7 @@ func get_wall_layout() -> Dictionary:
 		"gap_mm": float(_get_number("wall", "gap_mm", 5.0)),
 		"this_node_column": int(_get_number("wall", "this_node_column", 0)),
 		"this_node_row": int(_get_number("wall", "this_node_row", 0)),
+		"rotation_z_degrees": float(_get_number("wall", "rotation_z_degrees", 0.0)),
 	}
 
 func get_network_settings() -> Dictionary:
@@ -112,6 +113,7 @@ monitor_height_mm = 300.0
 gap_mm = 5.0
 this_node_column = 0
 this_node_row = 0
+rotation_z_degrees = 0.0
 
 [network]
 mode = "broadcast"
