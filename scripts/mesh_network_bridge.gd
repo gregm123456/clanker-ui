@@ -72,6 +72,9 @@ func send_object_despawn(object_id: String) -> void:
 		return
 	_transport.send("despawn", {"object_id": object_id})
 
+func get_address_book():
+	return _address_book
+
 func _can_send() -> bool:
 	return _transport != null and _mesh_sync_service != null
 

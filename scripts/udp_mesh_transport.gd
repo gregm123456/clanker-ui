@@ -1,10 +1,20 @@
 class_name UdpMeshTransport
 extends Node
 
-## Versioned JSON envelope shared by mesh clients:
+## Versioned JSON-over-UDP contract shared by mesh clients.
+## Every datagram is one UTF-8 JSON object with this shape:
 ## {"version": 1, "type": "transform|calibration|spawn|despawn|heartbeat",
-##  "sender_peer_id": "peer", "payload": { ... }}
-## Payloads are JSON-safe dictionaries. Malformed packets are dropped.
+##  "sender_peer_id": "peer-id", "payload": { ... }}
+## `sender_peer_id` identifies the sending process and is never a scene object id.
+## `payload` is a JSON object. Its contents are:
+## - transform: TransformSyncSchema dictionary, including object_id and transform data.
+## - calibration: MeshCalibrationModel.to_dictionary() result.
+## - spawn: descriptor dictionary; object_id and owner_peer_id are required.
+## - despawn: {"object_id": "shared-object-id"}.
+## - heartbeat: {} (or future optional presence metadata).
+## Receivers must ignore unknown versions/types, packets without a string sender id,
+## and packets whose payload is not an object. A malformed datagram must not terminate
+## the receiver. This contract contains no SpinningCube-specific fields.
 
 const PROTOCOL_VERSION := 1
 const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")

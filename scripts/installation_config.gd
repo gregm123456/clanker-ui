@@ -44,6 +44,8 @@ func get_network_settings() -> Dictionary:
 
 func get_peers() -> Dictionary:
 	var peers: Dictionary = {}
+	if not _config.has_section("peers"):
+		return peers
 	var section_keys := _config.get_section_keys("peers")
 	for key in section_keys:
 		var raw_value: Variant = _config.get_value("peers", key, "")

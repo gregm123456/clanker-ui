@@ -11,6 +11,7 @@ var _frame_number: int = 0
 var _width: int = 0
 var _height: int = 0
 var _last_error := ""
+var _last_image: Image
 
 func is_available() -> bool:
 	return OS.get_name() == "Linux" and ClassDB.class_exists("CsiCamera")
@@ -57,6 +58,7 @@ func update() -> bool:
 		_texture = ImageTexture.create_from_image(image)
 	else:
 		_texture.update(image)
+	_last_image = image
 	_width = width
 	_height = height
 	_frame_number = int(_camera.call("get_frame_number"))
@@ -70,6 +72,9 @@ func is_active() -> bool:
 
 func get_texture() -> Texture2D:
 	return _texture
+
+func get_image() -> Image:
+	return _last_image
 
 func get_aspect() -> float:
 	return float(_width) / float(_height) if _height > 0 else 0.0

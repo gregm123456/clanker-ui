@@ -8,6 +8,9 @@ const InstallationConfigScript = preload("res://scripts/installation_config.gd")
 const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
 const MeshNetworkBridgeScript = preload("res://scripts/mesh_network_bridge.gd")
 const RemoteObjectRendererScript = preload("res://scripts/remote_object_renderer.gd")
+const WebcamSnapshotServerScript = preload("res://scripts/webcam_snapshot_server.gd")
+const WebcamSnapshotClientScript = preload("res://scripts/webcam_snapshot_client.gd")
+const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -93,6 +96,8 @@ var _camera_source = WebcamCameraSourceAdapterScript.new()
 var _mesh_sync_controller = SpinningCubeMeshSyncControllerScript.new()
 var _mesh_network_bridge
 var _remote_object_renderer
+var _webcam_snapshot_server
+var _webcam_snapshot_client
 var _webcam_started: bool = false
 
 func _ready() -> void:
@@ -147,6 +152,10 @@ func _exit_tree() -> void:
 	_webcam_started = false
 	if _mesh_network_bridge != null:
 		_mesh_network_bridge.shutdown()
+	if _webcam_snapshot_client != null:
+		_webcam_snapshot_client.close()
+	if _webcam_snapshot_server != null:
+		_webcam_snapshot_server.close()
 	if _remote_object_renderer != null:
 		_remote_object_renderer.shutdown()
 	_mesh_sync_controller.shutdown()
@@ -287,3 +296,45 @@ func _configure_mesh_sync() -> void:
 			shared_object_id,
 			camera
 		)
+		var snapshot_address_book = PeerAddressBookScript.new()
+		snapshot_address_book.configure(
+			installation_config.get_peers(),
+			int(installation_config.get_network_settings().get("udp_port", 9000))
+		)
+		_webcam_snapshot_client = WebcamSnapshotClientScript.new()
+		add_child(_webcam_snapshot_client)
+		var snapshot_port := int(installation_config.get_network_settings().get("snapshot_tcp_port", 9010))
+		var snapshot_client_error: Error = _webcam_snapshot_client.configure(snapshot_address_book, snapshot_port)
+		if snapshot_client_error != OK:
+			print("[spinning_cube] Snapshot client disabled after setup error: ", snapshot_client_error)
+			_webcam_snapshot_client.queue_free()
+			_webcam_snapshot_client = null
+		else:
+			_remote_object_renderer.set_snapshot_request_callback(_on_snapshot_requested)
+			_webcam_snapshot_client.snapshot_received.connect(_on_snapshot_received)
+			_webcam_snapshot_client.snapshot_failed.connect(_on_snapshot_failed)
+
+		_webcam_snapshot_server = WebcamSnapshotServerScript.new()
+		add_child(_webcam_snapshot_server)
+		var snapshot_server_error: Error = _webcam_snapshot_server.configure(
+			_camera_source,
+			snapshot_port
+		)
+		if snapshot_server_error != OK:
+			print("[spinning_cube] Snapshot server disabled after setup error: ", snapshot_server_error)
+			_webcam_snapshot_server.queue_free()
+			_webcam_snapshot_server = null
+
+func _on_snapshot_requested(object_id: String, owner_peer_id: String) -> void:
+	if _webcam_snapshot_client == null:
+		return
+	var error: Error = _webcam_snapshot_client.request_snapshot(object_id, owner_peer_id)
+	if error != OK and error != ERR_BUSY:
+		print("[spinning_cube] Snapshot request failed to start for ", object_id, ": ", error)
+
+func _on_snapshot_received(object_id: String, _owner_peer_id: String, texture: Texture2D) -> void:
+	if _remote_object_renderer != null:
+		_remote_object_renderer.apply_snapshot(object_id, texture)
+
+func _on_snapshot_failed(object_id: String, owner_peer_id: String, reason: String) -> void:
+	print("[spinning_cube] Snapshot fetch failed for ", object_id, " from ", owner_peer_id, ": ", reason)

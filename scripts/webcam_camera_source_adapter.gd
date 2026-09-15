@@ -61,6 +61,13 @@ func process(delta: float) -> void:
 				_last_webcam_aspect = aspect
 				_material.set_shader_parameter("webcam_aspect", aspect)
 
+func get_current_frame_image() -> Image:
+	if _csi_provider != null:
+		return _csi_provider.get_image()
+	if current_feed != null and current_feed.is_active():
+		return current_feed.get_image()
+	return null
+
 func shutdown() -> void:
 	_deactivation_generation += 1
 	if CameraServer.camera_feed_added.is_connected(_on_camera_feed_event):

@@ -4,6 +4,7 @@ extends Node
 signal snapshot_requested(object_id, owner_peer_id)
 
 const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
+const SUPPORTED_DESCRIPTOR_KINDS := ["mesh_instance"]
 
 var _mesh_sync_service
 var _local_object_id: String = ""
@@ -22,6 +23,19 @@ func set_camera(camera: Camera3D) -> void:
 
 func set_snapshot_request_callback(callback: Callable) -> void:
 	_snapshot_callback = callback
+
+func apply_snapshot(object_id: String, texture: Texture2D) -> void:
+	if object_id.is_empty() or texture == null:
+		return
+	var state: Dictionary = _proxy_states.get(object_id, {})
+	var instance: MeshInstance3D = state.get("instance")
+	if instance == null or not instance.material_override is ShaderMaterial:
+		return
+	var material := instance.material_override as ShaderMaterial
+	material.set_shader_parameter("webcam_texture", texture)
+	material.set_shader_parameter("webcam_cbcr_texture", null)
+	material.set_shader_parameter("webcam_mode", 1)
+	material.set_shader_parameter("use_front_texture", false)
 
 func process(_delta: float) -> void:
 	if _mesh_sync_service == null:
@@ -126,6 +140,7 @@ func _on_peer_connection_changed(peer_id: String, is_online: bool) -> void:
 func _create_proxy_for_descriptor(object_id: String, descriptor: Dictionary) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	instance.name = "RemoteProxy_%s" % object_id
+	_resolve_descriptor_kind(descriptor)
 	var box_mesh := BoxMesh.new()
 	box_mesh.size = _resolve_proxy_size(descriptor)
 	instance.mesh = box_mesh
@@ -148,19 +163,34 @@ func _create_proxy_for_descriptor(object_id: String, descriptor: Dictionary) -> 
 		add_child(instance)
 	return instance
 
+func _resolve_descriptor_kind(descriptor: Dictionary) -> String:
+	var descriptor_kind := String(descriptor.get("kind", "mesh_instance"))
+	if SUPPORTED_DESCRIPTOR_KINDS.has(descriptor_kind):
+		return descriptor_kind
+	print("[remote_object_renderer] Unknown descriptor kind '", descriptor_kind, "'; using generic box proxy")
+	return "mesh_instance"
+
 func _resolve_proxy_size(descriptor: Dictionary) -> Vector3:
 	var render_config: Dictionary = descriptor.get("render_config", {})
 	if typeof(render_config) == TYPE_DICTIONARY:
 		var candidate: Variant = render_config.get("size", null)
 		if typeof(candidate) == TYPE_ARRAY and candidate.size() >= 3:
-			return Vector3(float(candidate[0]), float(candidate[1]), float(candidate[2]))
+			return _validated_proxy_size(candidate)
 		candidate = render_config.get("box_size", null)
 		if typeof(candidate) == TYPE_ARRAY and candidate.size() >= 3:
-			return Vector3(float(candidate[0]), float(candidate[1]), float(candidate[2]))
+			return _validated_proxy_size(candidate)
 		candidate = render_config.get("scale", null)
 		if typeof(candidate) == TYPE_ARRAY and candidate.size() >= 3:
-			return Vector3(float(candidate[0]), float(candidate[1]), float(candidate[2]))
+			return _validated_proxy_size(candidate)
 	return Vector3(1.8, 1.8, 0.1)
+
+func _validated_proxy_size(candidate: Array) -> Vector3:
+	var size := Vector3(float(candidate[0]), float(candidate[1]), float(candidate[2]))
+	if not is_finite(size.x) or not is_finite(size.y) or not is_finite(size.z):
+		return Vector3(1.8, 1.8, 0.1)
+	if size.x <= 0.0 or size.y <= 0.0 or size.z <= 0.0:
+		return Vector3(1.8, 1.8, 0.1)
+	return size
 
 func _is_object_visible_to_camera(position: Vector3) -> bool:
 	if _camera == null:

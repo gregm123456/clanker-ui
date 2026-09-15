@@ -117,6 +117,20 @@ The exported values remain the editor-time fallback when a config value is absen
 > world matches across screens. The per-node `this_node_column` and `this_node_row` values
 > determine each Pi's placement inside that shared wall.
 
+### One-shot remote webcam snapshots
+
+Each node also listens on `network.snapshot_tcp_port` (default `9010`). When a remote proxy
+crosses into the local camera frustum, the renderer requests one still image from the owning
+peer. The TCP request is `GET /snapshot` followed by a newline. The response is a little-endian
+4-byte JPEG length followed by exactly that many JPEG bytes; the connection then closes.
+
+The snapshot server captures the current CPU-readable frame from the configured webcam or CSI
+provider. The client decodes it into an `ImageTexture` and applies it to the proxy's shader.
+Requests are polled asynchronously, have a short timeout, and are deduplicated per object while
+in flight. A failed fetch leaves the proxy's existing neutral material or previous still intact.
+The renderer only triggers on an outside-to-inside visibility transition, so a visible proxy does
+not continuously fetch images.
+
 ## Runtime architecture
 
 - `spinning_cube.gd` now acts as a thin scene coordinator.
@@ -131,6 +145,9 @@ The exported values remain the editor-time fallback when a config value is absen
 - `scripts/peer_address_book.gd` lazily resolves configured IPv4 addresses and hostnames, including Tailscale names, with cached results and retry backoff.
 - `scripts/udp_mesh_transport.gd` provides versioned JSON-over-UDP broadcast, unicast, or combined transport on the configured UDP port.
 - `scripts/mesh_network_bridge.gd` connects the generic UDP envelope to `MeshSyncService`, forwards local spawn/calibration/transform updates, applies remote messages under an echo-prevention guard, and tracks peer heartbeat timeouts.
+- `scripts/webcam_snapshot_server.gd` serves one JPEG still per TCP request without blocking the scene loop.
+- `scripts/webcam_snapshot_client.gd` fetches and decodes one remote JPEG asynchronously.
+- `scripts/remote_object_renderer.gd` requests snapshots on frustum-entry transitions and applies returned textures to proxy materials.
 
 The Phase 3 UDP envelope is:
 
@@ -143,6 +160,19 @@ dictionary form of `MeshCalibrationModel`; spawn and despawn payloads include `o
 Unknown message types, unsupported versions, malformed JSON, and invalid payload shapes are
 dropped without terminating the receiver. The network bridge is generic and does not render
 remote objects; Phase 4 owns that scene behavior.
+
+The envelope is the stable interoperability boundary for future clients: `sender_peer_id` is
+the process identity, while `payload.object_id` identifies a shared object. A `spawn` payload
+must contain the object descriptor and its `object_id`; a `transform` payload uses the existing
+`TransformSyncSchema`; a `calibration` payload uses `MeshCalibrationModel.to_dictionary()`;
+`despawn` contains only `object_id`; and `heartbeat` may use an empty object. Senders should use
+the same `udp_port` for broadcast and configured unicast destinations. The `[peers]` port is the
+UDP destination port; snapshot requests always use the remote node's `snapshot_tcp_port`.
+
+The TCP snapshot wire format is deliberately not HTTP: send UTF-8 `GET /snapshot\n`, read a
+little-endian uint32 JPEG length, then read exactly that many JPEG bytes. The maximum accepted
+JPEG is 20 MiB. A closed connection means the request failed; clients retain the previous still
+or neutral proxy material and do not retry continuously while the proxy remains visible.
 
 ## World axis and movement conventions
 
