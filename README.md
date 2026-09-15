@@ -50,6 +50,73 @@ Set `GODOT_BIN=/path/to/Godot` if your Godot binary isn't at the default macOS
 location or on `PATH`. Make this a routine step in your pull workflow — it's
 cheap and safe to run even when nothing changed.
 
+## Per-node installation config (`user://installation.cfg`)
+
+Each Pi keeps its own local config in its Godot user-data directory so the same exported app
+can run in different wall positions without rebuilding. On first run the project writes a
+template config to `user://installation.cfg` and logs the resolved filesystem path via
+`ProjectSettings.globalize_path("user://installation.cfg")`.
+
+The canonical template lives in `config/installation.template.cfg` and is copied into place
+when the file is missing. The file is intentionally user-editable and supports the following
+sections and values:
+
+```ini
+[node]
+node_id = local_display
+peer_id = local
+
+[wall]
+columns = 2
+rows = 1
+monitor_width_mm = 168.0
+monitor_height_mm = 300.0
+gap_mm = 5.0
+this_node_column = 0
+this_node_row = 0
+
+[network]
+mode = broadcast
+udp_port = 9000
+broadcast_address = 255.255.255.255
+snapshot_tcp_port = 9010
+heartbeat_interval_sec = 2.0
+peer_timeout_sec = 15.0
+
+[peers]
+pi_right = 192.168.1.42:9000
+
+[camera]
+feed_index = 0
+prefer_csi_camera = true
+csi_camera_width = 960
+csi_camera_height = 540
+csi_camera_fps = 30
+csi_camera_name =
+webcam_fit_mode = 0
+flip_webcam_horizontal = true
+```
+
+At startup the scene applies these values as overrides to the exported defaults for:
+
+- `mesh_node_id`
+- `mesh_peer_id`
+- `webcam_feed_index`
+- `prefer_csi_camera`
+- `csi_camera_width`
+- `csi_camera_height`
+- `csi_camera_fps`
+- `csi_camera_name`
+- `webcam_fit_mode`
+- `flip_webcam_horizontal`
+
+The exported values remain the editor-time fallback when a config value is absent or blank.
+
+> Hard requirement: all Pi nodes in the same installation must agree on the wall geometry
+> (`columns`, `rows`, `monitor_width_mm`, `monitor_height_mm`, `gap_mm`) so the shared 3D
+> world matches across screens. The per-node `this_node_column` and `this_node_row` values
+> determine each Pi's placement inside that shared wall.
+
 ## Runtime architecture
 
 - `spinning_cube.gd` now acts as a thin scene coordinator.

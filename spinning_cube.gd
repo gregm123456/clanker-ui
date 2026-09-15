@@ -4,6 +4,8 @@ const SpinningCubeInputControllerScript = preload("res://scripts/spinning_cube_i
 const SpinningCubeMovementControllerScript = preload("res://scripts/spinning_cube_movement_controller.gd")
 const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_source_adapter.gd")
 const SpinningCubeMeshSyncControllerScript = preload("res://scripts/spinning_cube_mesh_sync_controller.gd")
+const InstallationConfigScript = preload("res://scripts/installation_config.gd")
+const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
 
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -80,6 +82,7 @@ const SpinningCubeMeshSyncControllerScript = preload("res://scripts/spinning_cub
 @export var calibration_model: MeshCalibrationModel
 
 var camera: Camera3D
+var installation_config: InstallationConfig
 
 var _mat: ShaderMaterial
 var _input_controller = SpinningCubeInputControllerScript.new()
@@ -89,7 +92,9 @@ var _mesh_sync_controller = SpinningCubeMeshSyncControllerScript.new()
 var _webcam_started: bool = false
 
 func _ready() -> void:
+	installation_config = InstallationConfigScript.new()
 	camera = get_viewport().get_camera_3d()
+	_apply_runtime_configuration()
 	_configure_components()
 	_movement_controller.randomize_speed_and_velocity()
 	tumble_speed = _movement_controller.tumble_speed
@@ -149,6 +154,58 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if use_fixed_step_movement:
 		camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
+
+func _apply_runtime_configuration() -> void:
+	if installation_config == null:
+		installation_config = InstallationConfigScript.new()
+
+	var config_node_id := installation_config.get_node_id().strip_edges()
+	if not config_node_id.is_empty():
+		mesh_node_id = config_node_id
+
+	var config_peer_id := installation_config.get_peer_id().strip_edges()
+	if not config_peer_id.is_empty():
+		mesh_peer_id = config_peer_id
+
+	var wall_layout: Dictionary = installation_config.get_wall_layout()
+	if wall_layout.has("columns") and wall_layout.has("rows"):
+		var world_units_per_mm := WallGeometryCalculatorScript.compute_world_units_per_mm(camera, float(wall_layout.get("monitor_width_mm", 168.0)))
+		var computed_node_offset := WallGeometryCalculatorScript.compute_node_camera_offset(wall_layout, world_units_per_mm)
+		var computed_wall_bounds := WallGeometryCalculatorScript.compute_wall_world_bounds(wall_layout, world_units_per_mm)
+
+		if installation_geometry == null:
+			installation_geometry = InstallationGeometry.new()
+		installation_geometry.world_bounds_center = computed_wall_bounds.get("center", Vector3.ZERO)
+		installation_geometry.world_bounds_half_extents = computed_wall_bounds.get("half_extents", Vector3.ONE)
+		bounds_volume_center = installation_geometry.world_bounds_center
+		bounds_volume_half_extents = installation_geometry.world_bounds_half_extents
+		bounds_mode = 2
+		bounds_behavior = 0
+		enable_wraparound = true
+
+		if calibration_model == null:
+			calibration_model = MeshCalibrationModel.new()
+		calibration_model.physical_position = computed_node_offset
+		calibration_model.physical_rotation_degrees = Vector3.ZERO
+		calibration_model.node_id = mesh_node_id
+
+	var camera_settings: Dictionary = installation_config.get_camera_settings()
+	if camera_settings.has("feed_index"):
+		webcam_feed_index = int(camera_settings.get("feed_index", webcam_feed_index))
+	if camera_settings.has("prefer_csi_camera"):
+		prefer_csi_camera = bool(camera_settings.get("prefer_csi_camera", prefer_csi_camera))
+	if camera_settings.has("csi_camera_width"):
+		csi_camera_width = int(camera_settings.get("csi_camera_width", csi_camera_width))
+	if camera_settings.has("csi_camera_height"):
+		csi_camera_height = int(camera_settings.get("csi_camera_height", csi_camera_height))
+	if camera_settings.has("csi_camera_fps"):
+		csi_camera_fps = int(camera_settings.get("csi_camera_fps", csi_camera_fps))
+	if camera_settings.has("csi_camera_name"):
+		csi_camera_name = String(camera_settings.get("csi_camera_name", csi_camera_name))
+	if camera_settings.has("fit_mode"):
+		webcam_fit_mode = int(camera_settings.get("fit_mode", webcam_fit_mode))
+	if camera_settings.has("flip_horizontal"):
+		flip_webcam_horizontal = bool(camera_settings.get("flip_horizontal", flip_webcam_horizontal))
 
 func _configure_components() -> void:
 	_input_controller.hide_mouse_cursor = hide_mouse_cursor

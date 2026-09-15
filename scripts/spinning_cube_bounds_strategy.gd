@@ -1,6 +1,8 @@
 class_name SpinningCubeBoundsStrategy
 extends RefCounted
 
+const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
+
 enum BoundsMode {
 	NONE,
 	WRAP_2D_VIEWPORT,
@@ -42,30 +44,11 @@ func _apply_viewport_wrap_2d(target: Node3D, camera: Camera3D, viewport: Viewpor
 	if vp_size.y <= 0:
 		return resolved_camera
 
-	var aspect := vp_size.x / vp_size.y
 	var cam_pos := resolved_camera.global_position
 	var z_dist := absf(cam_pos.z - target.global_position.z)
-
-	var half_h: float
-	var half_w: float
-	if resolved_camera.projection == Camera3D.PROJECTION_PERSPECTIVE:
-		var fov_rad := deg_to_rad(resolved_camera.fov)
-		if resolved_camera.keep_aspect == Camera3D.KEEP_WIDTH:
-			half_w = tan(fov_rad * 0.5) * z_dist
-			half_h = half_w / aspect
-		else:
-			half_h = tan(fov_rad * 0.5) * z_dist
-			half_w = half_h * aspect
-	else:
-		if resolved_camera.keep_aspect == Camera3D.KEEP_WIDTH:
-			half_w = resolved_camera.size * 0.5
-			half_h = half_w / aspect
-		else:
-			half_h = resolved_camera.size * 0.5
-			half_w = half_h * aspect
-
-	var bound_x := half_w + wrap_margin
-	var bound_y := half_h + wrap_margin
+	var frustum_size := WallGeometryCalculatorScript.frustum_size_at_distance(resolved_camera, z_dist)
+	var bound_x := frustum_size.x + wrap_margin
+	var bound_y := frustum_size.y + wrap_margin
 
 	var next_global_position := target.global_position
 	var rel_x := next_global_position.x - cam_pos.x

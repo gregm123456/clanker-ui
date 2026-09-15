@@ -326,4 +326,32 @@ flowchart LR
 - Loop-prevention for the network bridge uses an explicit outbound call-site plus an
   inbound reentrancy guard, not signal-origin tagging — simpler, and avoids touching
   `MeshSyncService`'s existing signal contract.
+
+## Recommendations from the Phase 1/2 tuning work
+
+- Keep the wall geometry math and the runtime camera calibration separated from the
+  network bridge. The wall math should remain a pure geometry utility, while the
+  bridge only transports already-normalized sync payloads.
+- Do not make the network stack responsible for scene-specific behavior. It should
+  exchange generic mesh snapshots and transforms, and leave visibility / rendering /
+  material decisions to the local scene logic.
+- Treat the camera distance and world depth as configuration values, not hard-coded
+  assumptions. The demo scene should be able to move farther from the camera or use a
+  deeper wall volume without forcing a code change.
+- Keep the per-node physical offset in `calibration_model.physical_position` and leave
+  the rest of the camera placement logic alone. That is the correct integration point
+  for the wall-aligned calibration we want across nodes.
+- Build the network bridge to be explicitly re-entrant-safe: outbound sends should be
+  triggered only from known local publish call sites, while inbound payloads should use
+  a short guard to avoid echo loops.
+- Prefer a single shared 3D wall volume to the old viewport-wrap model for any multi-
+  monitor installation. The former preserves the continuity of motion across monitor
+  boundaries, which is the actual installation behavior we care about.
+- Keep the visual tuning knobs in the scene or config (camera z-distance, motion speed,
+  wall depth) separate from the transport contract. That way the networking can stay
+  stable even while the display and motion feel are tuned.
+- For the actual wall install, validate the cube motion with a real two-monitor test and
+  keep the per-node `this_node_column` values consistent with the shared wall geometry.
+  If the wall geometry differs between nodes, the motion will appear to jump or
+  overlap even if the networking is working perfectly.
 </content>
