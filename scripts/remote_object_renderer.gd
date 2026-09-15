@@ -11,6 +11,7 @@ var _local_object_id: String = ""
 var _camera: Camera3D
 var _snapshot_callback: Callable = Callable()
 var _proxy_states: Dictionary = {}
+var _pending_transforms: Dictionary = {}
 
 func configure(mesh_sync_service, local_object_id: String, camera: Camera3D = null) -> void:
 	_mesh_sync_service = mesh_sync_service
@@ -61,6 +62,7 @@ func shutdown() -> void:
 		if instance != null:
 			instance.queue_free()
 	_proxy_states.clear()
+	_pending_transforms.clear()
 
 func _connect_service_signals() -> void:
 	if _mesh_sync_service == null:
@@ -103,10 +105,27 @@ func _on_shared_object_spawned(object_id: String, descriptor: Dictionary) -> voi
 		"owner_peer_id": String(descriptor.get("owner_peer_id", "")),
 		"is_visible": false
 	}
+	var pending_transform: Dictionary = _pending_transforms.get(object_id, {})
+	if not pending_transform.is_empty():
+		_apply_transform(object_id, pending_transform)
+		_pending_transforms.erase(object_id)
+	else:
+		var known_state: Dictionary = _mesh_sync_service.get_last_known_object_state(object_id)
+		var known_transform: Dictionary = known_state.get("transform", {})
+		if not known_transform.is_empty():
+			_apply_transform(object_id, known_transform)
 
 func _on_shared_object_transform_updated(object_id: String, transform_state: Dictionary) -> void:
 	if object_id.is_empty() or object_id == _local_object_id:
 		return
+	var state: Dictionary = _proxy_states.get(object_id, {})
+	var instance: MeshInstance3D = state.get("instance")
+	if instance == null:
+		_pending_transforms[object_id] = transform_state.duplicate(true)
+		return
+	_apply_transform(object_id, transform_state)
+
+func _apply_transform(object_id: String, transform_state: Dictionary) -> void:
 	var state: Dictionary = _proxy_states.get(object_id, {})
 	var instance: MeshInstance3D = state.get("instance")
 	if instance == null:

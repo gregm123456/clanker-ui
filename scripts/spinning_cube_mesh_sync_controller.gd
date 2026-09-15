@@ -149,7 +149,14 @@ func _on_calibration_updated(node_id: String, calibration: MeshCalibrationModel)
 		Basis.from_euler(physical_rotation_radians),
 		calibration.physical_position
 	)
-	_camera.global_transform = physical_transform * calibration.camera_offset
+	var camera_origin := calibration.camera_offset.origin
+	var has_only_display_roll := is_zero_approx(physical_rotation_radians.x) and is_zero_approx(physical_rotation_radians.y)
+	if not has_only_display_roll:
+		camera_origin = physical_transform.basis * camera_origin
+	_camera.global_transform = Transform3D(
+		physical_transform.basis * calibration.camera_offset.basis,
+		calibration.physical_position + camera_origin
+	)
 
 func _on_shared_object_spawned(object_id: String, descriptor: Dictionary) -> void:
 	if object_id != shared_object_id or _target == null:

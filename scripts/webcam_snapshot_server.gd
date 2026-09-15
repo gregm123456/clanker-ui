@@ -53,6 +53,9 @@ func _process(delta: float) -> void:
 			_close_connection(index)
 			continue
 		peer.poll()
+		if String(connection.get("state", "receiving")) == "sending":
+			_send_response(index, connection)
+			continue
 		if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 			if peer.get_status() == StreamPeerTCP.STATUS_ERROR:
 				_close_connection(index)
@@ -108,8 +111,28 @@ func _serve_request(index: int) -> void:
 	response.resize(4)
 	response.encode_u32(0, jpeg.size())
 	response.append_array(jpeg)
-	peer.put_data(response)
-	_close_connection(index)
+	connection["state"] = "sending"
+	connection["response"] = response
+	connection["response_offset"] = 0
+	_connections[index] = connection
+	_send_response(index, connection)
+
+func _send_response(index: int, connection: Dictionary) -> void:
+	var peer: StreamPeerTCP = connection.get("peer")
+	var response: PackedByteArray = connection.get("response", PackedByteArray())
+	var offset := int(connection.get("response_offset", 0))
+	if peer == null or peer.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+		_close_connection(index)
+		return
+	if offset >= response.size():
+		_close_connection(index)
+		return
+	var result: Array = peer.put_partial_data(response.slice(offset))
+	if result.size() < 2 or result[0] != OK:
+		_close_connection(index)
+		return
+	connection["response_offset"] = offset + int(result[1])
+	_connections[index] = connection
 
 func _close_connection(index: int) -> void:
 	if index < 0 or index >= _connections.size():

@@ -14,6 +14,8 @@ var _peer_timeout_sec: float = 15.0
 var _heartbeat_elapsed: float = 0.0
 var _last_seen_by_peer: Dictionary = {}
 var _applying_remote: bool = false
+var _local_calibration: MeshCalibrationModel
+var _local_objects: Dictionary = {}
 
 func configure(mesh_sync_service: MeshSyncService, network_settings: Dictionary, peers: Dictionary, local_peer_id: String) -> Error:
 	_mesh_sync_service = mesh_sync_service
@@ -52,6 +54,7 @@ func shutdown() -> void:
 func send_calibration(calibration: MeshCalibrationModel) -> void:
 	if not _can_send() or calibration == null or _applying_remote:
 		return
+	_local_calibration = calibration.duplicate_model()
 	_transport.send("calibration", calibration.to_dictionary())
 
 func send_object_spawn(object_id: String, descriptor: Dictionary) -> void:
@@ -60,11 +63,20 @@ func send_object_spawn(object_id: String, descriptor: Dictionary) -> void:
 	var payload := descriptor.duplicate(true)
 	payload["object_id"] = object_id
 	payload["owner_peer_id"] = String(payload.get("owner_peer_id", _local_peer_id))
+	_local_objects[object_id] = {
+		"descriptor": payload.duplicate(true),
+		"transform": _local_objects.get(object_id, {}).get("transform", {})
+	}
 	_transport.send("spawn", payload)
 
 func send_object_transform(payload: Dictionary) -> void:
 	if not _can_send() or _applying_remote:
 		return
+	var object_id := String(payload.get("object_id", ""))
+	if not object_id.is_empty():
+		var object_state: Dictionary = _local_objects.get(object_id, {})
+		object_state["transform"] = payload.duplicate(true)
+		_local_objects[object_id] = object_state
 	_transport.send("transform", payload)
 
 func send_object_despawn(object_id: String) -> void:
@@ -82,12 +94,15 @@ func _on_message_received(message: Dictionary) -> void:
 	var sender_peer_id := String(message.get("sender_peer_id", ""))
 	if sender_peer_id.is_empty() or sender_peer_id == _local_peer_id:
 		return
+	var is_new_peer := not _last_seen_by_peer.has(sender_peer_id)
 	var now := Time.get_ticks_msec() / 1000.0
 	_last_seen_by_peer[sender_peer_id] = now
 	_mesh_sync_service.set_peer_online(sender_peer_id, true)
 
 	var payload: Dictionary = message.get("payload", {})
 	_applying_remote = true
+	if is_new_peer:
+		_replay_local_state()
 	match String(message.get("type", "")):
 		"heartbeat":
 			pass
@@ -112,3 +127,18 @@ func _on_message_received(message: Dictionary) -> void:
 			if not despawn_object_id.is_empty():
 				_mesh_sync_service.publish_object_despawn(despawn_object_id)
 	_applying_remote = false
+
+func _replay_local_state() -> void:
+	if not _can_send():
+		return
+	if _local_calibration != null:
+		_transport.send("calibration", _local_calibration.to_dictionary())
+	for object_id_variant in _local_objects.keys():
+		var object_id := String(object_id_variant)
+		var object_state: Dictionary = _local_objects[object_id]
+		var descriptor: Dictionary = object_state.get("descriptor", {})
+		if not descriptor.is_empty():
+			_transport.send("spawn", descriptor)
+		var transform: Dictionary = object_state.get("transform", {})
+		if not transform.is_empty():
+			_transport.send("transform", transform)

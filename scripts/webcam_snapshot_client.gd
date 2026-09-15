@@ -59,8 +59,7 @@ func _process(delta: float) -> void:
 			continue
 		stream.poll()
 		var status := stream.get_status()
-		var available := stream.get_available_bytes()
-		if status == StreamPeerTCP.STATUS_ERROR or (status == StreamPeerTCP.STATUS_NONE and available <= 0):
+		if status == StreamPeerTCP.STATUS_ERROR or status == StreamPeerTCP.STATUS_NONE:
 			_fail_request(object_id, request, "TCP connection failed")
 			continue
 		if String(request.get("state", "")) == "connecting":
@@ -72,9 +71,10 @@ func _process(delta: float) -> void:
 				request["state"] = "header"
 			_requests[object_id] = request
 			continue
-		if status != StreamPeerTCP.STATUS_CONNECTED and available <= 0:
+		if status != StreamPeerTCP.STATUS_CONNECTED:
 			_fail_request(object_id, request, "TCP connection closed before snapshot")
 			continue
+		var available := stream.get_available_bytes()
 		if available <= 0:
 			_requests[object_id] = request
 			continue
