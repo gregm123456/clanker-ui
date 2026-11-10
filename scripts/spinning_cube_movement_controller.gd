@@ -15,6 +15,9 @@ var bounds_volume_half_extents: Vector3 = Vector3(8.0, 4.5, 4.0)
 
 var _bounds_strategy := SpinningCubeBoundsStrategyScript.new()
 
+func configure_shared_screen(camera: Camera3D, virtual_size: Vector2i) -> bool:
+	return _bounds_strategy.configure_shared_screen(camera, virtual_size)
+
 func set_legacy_planar_velocity(legacy_velocity: Vector2) -> void:
 	move_velocity = Vector3(legacy_velocity.x, legacy_velocity.y, move_velocity.z)
 
@@ -47,7 +50,8 @@ func process_transform(target: Node3D, delta: float, camera: Camera3D, viewport:
 			bounds_mode,
 			bounds_behavior,
 			bounds_volume_center,
-			bounds_volume_half_extents
+			bounds_volume_half_extents,
+			move_velocity
 		)
 
 	return camera
@@ -62,7 +66,8 @@ func handle_viewport_size_changed(target: Node3D, camera: Camera3D, viewport: Vi
 			bounds_mode,
 			bounds_behavior,
 			bounds_volume_center,
-			bounds_volume_half_extents
+			bounds_volume_half_extents,
+			move_velocity
 		)
 
 	return camera

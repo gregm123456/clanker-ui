@@ -166,6 +166,27 @@ protocol. A Pi without a monitor is not necessarily running Godot with
 `--headless`; verify its CSI capture and peer connection separately. Touchscreen
 input mapping is not configured by combined-wall mode.
 
+#### Shared screen-edge wrapping
+
+To wrap objects only after they have fully left the combined view, add the same
+settings to **every object-owning peer**, including headless peers:
+
+```ini
+[shared_screen_wrap]
+enabled = true
+panel_width_px = 600
+panel_height_px = 1024
+```
+
+These are the logical portrait dimensions of one panel. All peers must also use
+the same `[wall]` dimensions and gap and the same scene camera pose and FOV.
+The virtual view includes the bezel gap; local viewport size and per-node camera
+calibration do not determine the wrap edges. The existing depth wrap is retained.
+When disabled (the default), the existing volume wrapping remains unchanged.
+This option currently supports a two-column, one-row wall and a perspective camera
+with height-locked FOV. If the combined display falls back to one screen, the
+shared wrap reference remains the full wall.
+
 > Hard requirement: all Pi nodes in the same installation must agree on the wall geometry
 > (`columns`, `rows`, `monitor_width_mm`, `monitor_height_mm`, `gap_mm`) so the shared 3D
 > world matches across screens. The per-node `this_node_column` and `this_node_row` values

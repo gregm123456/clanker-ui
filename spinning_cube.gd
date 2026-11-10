@@ -6,6 +6,7 @@ const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_sou
 const SpinningCubeMeshSyncControllerScript = preload("res://scripts/spinning_cube_mesh_sync_controller.gd")
 const InstallationConfigScript = preload("res://scripts/installation_config.gd")
 const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
+const CombinedDisplayGeometryScript = preload("res://scripts/combined_display_geometry.gd")
 const MeshNetworkBridgeScript = preload("res://scripts/mesh_network_bridge.gd")
 const RemoteObjectRendererScript = preload("res://scripts/remote_object_renderer.gd")
 const WebcamSnapshotServerScript = preload("res://scripts/webcam_snapshot_server.gd")
@@ -32,8 +33,8 @@ const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 @export var wrap_margin: float = 1.6
 
 ## Bounds mode strategy:
-## 0 = none, 1 = 2D camera-relative wrap, 2 = 3D world-volume bounds
-@export_enum("None:0", "2D Viewport Wrap:1", "3D Volume Bounds:2") var bounds_mode: int = 1
+## 0 = none, 1 = 2D camera-relative wrap, 2 = 3D world-volume bounds, 3 = shared screen wrap
+@export_enum("None:0", "2D Viewport Wrap:1", "3D Volume Bounds:2", "Shared Screen Wrap:3") var bounds_mode: int = 1
 
 ## 3D world-volume bounds behavior:
 ## 0 = wrap to opposite wall, 1 = hard-wall clamp
@@ -212,6 +213,31 @@ func _apply_runtime_configuration() -> void:
 		bounds_mode = 2
 		bounds_behavior = 0
 		enable_wraparound = true
+
+		var shared_wrap: Dictionary = installation_config.get_shared_screen_wrap_settings()
+		if bool(shared_wrap["enabled"]):
+			var panel_size := Vector2i(int(shared_wrap["panel_width_px"]), int(shared_wrap["panel_height_px"]))
+			var layout: Dictionary = {}
+			if int(wall_layout["columns"]) == 2 and int(wall_layout["rows"]) == 1:
+				layout = CombinedDisplayGeometryScript.calculate(
+					Rect2i(Vector2i.ZERO, panel_size), Rect2i(Vector2i(panel_size.x, 0), panel_size),
+					float(wall_layout["monitor_width_mm"]), float(wall_layout["gap_mm"])
+				)
+			if layout.is_empty() or not _movement_controller.configure_shared_screen(camera, layout["virtual_size"]):
+				push_error("[wrap] Invalid shared screen configuration; retaining 3D volume bounds")
+			else:
+				var virtual_size: Vector2i = layout["virtual_size"]
+				if combined_wall and get_viewport().size != virtual_size:
+					push_warning("[wrap] Configured shared reference size does not match the combined display viewport")
+				var total_width_mm := float(wall_layout["monitor_width_mm"]) * 2.0 + float(wall_layout["gap_mm"])
+				var half_width := tan(deg_to_rad(camera.fov) * 0.5) * absf(camera.global_position.z) * float(virtual_size.x) / float(virtual_size.y)
+				var shared_bounds := WallGeometryCalculatorScript.compute_wall_world_bounds(wall_layout, 2.0 * half_width / total_width_mm)
+				installation_geometry.world_bounds_center = shared_bounds["center"]
+				installation_geometry.world_bounds_half_extents = shared_bounds["half_extents"]
+				bounds_volume_center = installation_geometry.world_bounds_center
+				bounds_volume_half_extents = installation_geometry.world_bounds_half_extents
+				bounds_mode = 3
+				print("[wrap] Shared screen size=", virtual_size, " reference=", camera.global_transform, " fov=", camera.fov, " depth bounds=", bounds_volume_half_extents.z)
 
 		if calibration_model == null:
 			calibration_model = MeshCalibrationModel.new()

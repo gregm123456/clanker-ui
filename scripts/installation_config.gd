@@ -28,6 +28,13 @@ func get_display_settings() -> Dictionary:
 		"right_screen": int(_get_number("display", "right_screen", -1)),
 	}
 
+func get_shared_screen_wrap_settings() -> Dictionary:
+	return {
+		"enabled": _get_bool("shared_screen_wrap", "enabled", false),
+		"panel_width_px": int(_get_number("shared_screen_wrap", "panel_width_px", 0)),
+		"panel_height_px": int(_get_number("shared_screen_wrap", "panel_height_px", 0)),
+	}
+
 func get_wall_layout() -> Dictionary:
 	return {
 		"columns": int(_get_number("wall", "columns", 2)),
@@ -116,6 +123,11 @@ peer_id = "local"
 combined_wall = false
 left_screen = -1
 right_screen = -1
+
+[shared_screen_wrap]
+enabled = false
+panel_width_px = 600
+panel_height_px = 1024
 
 [wall]
 columns = 2
