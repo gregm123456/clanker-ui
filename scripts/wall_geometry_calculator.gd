@@ -46,6 +46,13 @@ static func compute_world_units_per_mm(camera: Camera3D, monitor_width_mm: float
 	var frustum_size := frustum_size_at_distance(camera, distance_to_wall)
 	return frustum_size.x / width_mm
 
+static func compute_combined_world_units_per_mm(camera: Camera3D, panel_width_mm: float, gap_mm: float) -> float:
+	var total_width_mm := panel_width_mm * 2.0 + gap_mm
+	if camera == null or total_width_mm <= 0.0:
+		return 0.0
+	var half_width := frustum_size_at_distance(camera, absf(camera.global_position.z)).x
+	return 2.0 * half_width / total_width_mm
+
 static func compute_node_camera_offset(wall_layout: Dictionary, world_units_per_mm: float) -> Vector3:
 	var column_count := maxi(int(wall_layout.get("columns", 1)), 1)
 	var row_count := maxi(int(wall_layout.get("rows", 1)), 1)

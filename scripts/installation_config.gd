@@ -21,6 +21,13 @@ func get_node_id() -> String:
 func get_peer_id() -> String:
 	return _get_string("node", "peer_id", "local")
 
+func get_display_settings() -> Dictionary:
+	return {
+		"combined_wall": _get_bool("display", "combined_wall", false),
+		"left_screen": int(_get_number("display", "left_screen", -1)),
+		"right_screen": int(_get_number("display", "right_screen", -1)),
+	}
+
 func get_wall_layout() -> Dictionary:
 	return {
 		"columns": int(_get_number("wall", "columns", 2)),
@@ -104,6 +111,11 @@ func _generate_default_template() -> String:
 [node]
 node_id = "local_display"
 peer_id = "local"
+
+[display]
+combined_wall = false
+left_screen = -1
+right_screen = -1
 
 [wall]
 columns = 2

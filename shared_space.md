@@ -1,5 +1,12 @@
 # Plan: LAN mesh networking + shared video-wall space for two (or more) Pi cubes
 
+> Historical plan: the original deployment below used one display per Pi.
+> The current two-output option uses `pi5ai2sd` for both panels, with
+> `m5image` available as a headless peer. Single-screen clients remain
+> supported. See the combined-wall setup in [README.md](README.md) for the
+> current configuration; the architecture and implementation status described
+> below reflect the earlier plan.
+
 ## Goal
 
 Two Raspberry Pis, each driving one portrait-orientation monitor, sit side by side

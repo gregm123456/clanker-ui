@@ -44,6 +44,7 @@ func _process(delta: float) -> void:
 	for peer_id_variant in _last_seen_by_peer.keys():
 		var peer_id := String(peer_id_variant)
 		if now - float(_last_seen_by_peer[peer_id]) > _peer_timeout_sec:
+			print("[mesh_network] peer timed out: ", peer_id)
 			_mesh_sync_service.set_peer_online(peer_id, false)
 			_last_seen_by_peer.erase(peer_id)
 
@@ -95,6 +96,8 @@ func _on_message_received(message: Dictionary) -> void:
 	if sender_peer_id.is_empty() or sender_peer_id == _local_peer_id:
 		return
 	var is_new_peer := not _last_seen_by_peer.has(sender_peer_id)
+	if is_new_peer:
+		print("[mesh_network] peer online: ", sender_peer_id)
 	var now := Time.get_ticks_msec() / 1000.0
 	_last_seen_by_peer[sender_peer_id] = now
 	_mesh_sync_service.set_peer_online(sender_peer_id, true)

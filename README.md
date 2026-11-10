@@ -113,6 +113,59 @@ At startup the scene applies these values as overrides to the exported defaults 
 
 The exported values remain the editor-time fallback when a config value is absent or blank.
 
+### One Pi driving two portrait displays
+
+The normal single-screen mode remains the default. To use one Pi for two adjacent
+screens, add the following to that Pi's existing `user://installation.cfg`:
+
+```ini
+[display]
+combined_wall = true
+left_screen = -1
+right_screen = -1
+```
+
+With exactly two screens, `-1` selects them automatically. If there are more,
+set both entries to distinct Godot screen indices; startup logs show the selected
+rectangles. The screens must have equal logical sizes and be adjacent and
+top-aligned. Arrange and rotate each output in the desktop configuration so
+both images are upright; the two physical panels may be rotated 180 degrees
+relative to each other. Do not apply that physical rotation again to the camera.
+
+Set `[wall]` to two columns and one row. Set `monitor_width_mm` and
+`monitor_height_mm` to the **visible** portrait panel dimensions, and `gap_mm`
+to the measured combined bezel/air gap. For the Waveshare panels the published
+visible width is approximately 64.8 mm; a 6 mm gap is approximately 56 pixels
+at 600 pixels wide. Use `gap_mm = 0` to disable compensation. Existing
+`this_node_column` and `rotation_z_degrees` settings do not move or rotate the
+camera in combined-wall mode. Existing user configuration files are never
+rewritten by this option.
+
+The app renders one wider virtual image and omits the gap between its two
+panel-sized slices. If layout detection or window placement fails, it logs a
+warning and starts the usual one-screen scene. A topology change during combined
+operation restarts display setup. F11/Alt-Enter restore the spanning rectangle
+in combined mode; Escape and M retain their normal functions.
+
+On `pi5ai2sd`, native Wayland currently reports unusable monitor positions to
+Godot 4.7.2. XWayland reported and accepted the spanning rectangle in testing;
+to select it from the graphical session, launch the export with
+`--display-driver x11`. No desktop-session switch is required for this test.
+The option `-- --combined-wall` temporarily enables combined mode without
+editing the config. The display backend and actual requested/placed window
+rectangles are logged at startup. Pixel alignment and performance should still
+be verified on the physical displays.
+
+For a static grid and diagonal seam check, add
+`-- --combined-wall --calibrate-display` to the launch command. The displayed
+grid includes the hidden bezel strip, so its diagonal should continue behind
+the physical gap rather than meet at the two visible edges.
+
+The headless peer retains its existing shared-object and one-shot snapshot
+protocol. A Pi without a monitor is not necessarily running Godot with
+`--headless`; verify its CSI capture and peer connection separately. Touchscreen
+input mapping is not configured by combined-wall mode.
+
 > Hard requirement: all Pi nodes in the same installation must agree on the wall geometry
 > (`columns`, `rows`, `monitor_width_mm`, `monitor_height_mm`, `gap_mm`) so the shared 3D
 > world matches across screens. The per-node `this_node_column` and `this_node_row` values

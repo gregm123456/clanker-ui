@@ -79,6 +79,8 @@ const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 ## Automatically hide mouse cursor (ideal for kiosk / fullscreen runs)
 @export var hide_mouse_cursor: bool = true
 
+var combined_wall: bool = false
+
 ## Shared scene mesh sync identifiers and calibration resource
 @export var mesh_sync_enabled: bool = true
 @export var mesh_node_id: String = "local_display"
@@ -190,8 +192,15 @@ func _apply_runtime_configuration() -> void:
 
 	var wall_layout: Dictionary = installation_config.get_wall_layout()
 	if wall_layout.has("columns") and wall_layout.has("rows"):
-		var world_units_per_mm := WallGeometryCalculatorScript.compute_world_units_per_mm(camera, float(wall_layout.get("monitor_width_mm", 168.0)))
-		var computed_node_offset := WallGeometryCalculatorScript.compute_node_camera_offset(wall_layout, world_units_per_mm)
+		var world_units_per_mm: float
+		var computed_node_offset := Vector3.ZERO
+		if combined_wall and camera != null:
+			world_units_per_mm = WallGeometryCalculatorScript.compute_combined_world_units_per_mm(
+				camera, float(wall_layout["monitor_width_mm"]), float(wall_layout["gap_mm"])
+			)
+		else:
+			world_units_per_mm = WallGeometryCalculatorScript.compute_world_units_per_mm(camera, float(wall_layout.get("monitor_width_mm", 168.0)))
+			computed_node_offset = WallGeometryCalculatorScript.compute_node_camera_offset(wall_layout, world_units_per_mm)
 		var computed_wall_bounds := WallGeometryCalculatorScript.compute_wall_world_bounds(wall_layout, world_units_per_mm)
 
 		if installation_geometry == null:
@@ -207,11 +216,15 @@ func _apply_runtime_configuration() -> void:
 		if calibration_model == null:
 			calibration_model = MeshCalibrationModel.new()
 		calibration_model.physical_position = computed_node_offset
-		calibration_model.physical_rotation_degrees = Vector3(
-			0.0,
-			0.0,
-			float(wall_layout.get("rotation_z_degrees", 0.0))
-		)
+		if combined_wall and camera != null:
+			calibration_model.camera_offset = camera.global_transform
+			calibration_model.physical_rotation_degrees = Vector3.ZERO
+		else:
+			calibration_model.physical_rotation_degrees = Vector3(
+				0.0,
+				0.0,
+				float(wall_layout.get("rotation_z_degrees", 0.0))
+			)
 		calibration_model.node_id = mesh_node_id
 
 	var camera_settings: Dictionary = installation_config.get_camera_settings()
@@ -340,6 +353,7 @@ func _on_snapshot_requested(object_id: String, owner_peer_id: String) -> void:
 
 func _on_snapshot_received(object_id: String, _owner_peer_id: String, texture: Texture2D) -> void:
 	if _remote_object_renderer != null:
+		print("[spinning_cube] Received snapshot for ", object_id)
 		_remote_object_renderer.apply_snapshot(object_id, texture)
 
 func _on_snapshot_failed(object_id: String, owner_peer_id: String, reason: String) -> void:
