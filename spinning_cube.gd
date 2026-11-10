@@ -43,7 +43,7 @@ const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 ## If unset, bounds_volume_center/half_extents are used directly.
 @export var installation_geometry: InstallationGeometry
 @export var bounds_volume_center: Vector3 = Vector3.ZERO
-@export var bounds_volume_half_extents: Vector3 = Vector3(8.0, 4.5, 4.0)
+@export var bounds_volume_half_extents: Vector3 = Vector3(8.0, 4.5, 0.0)
 
 ## Use fixed-step movement updates for deterministic motion progression.
 @export var use_fixed_step_movement: bool = false
