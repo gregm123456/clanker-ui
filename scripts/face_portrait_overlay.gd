@@ -1,7 +1,8 @@
 class_name FacePortraitOverlay
 extends CanvasLayer
 
-const JIGGLE_PIXELS := 8.0
+const JIGGLE_PIXELS := 10.0
+const PORTRAIT_SCALE := 1.5
 
 var max_portraits: int = 10
 var _root: Control
@@ -21,7 +22,7 @@ func add_faces(faces: Array, capture_order: int) -> void:
 		var image: Image = face["image"]
 		var portrait := Control.new()
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		portrait.size = Vector2(image.get_width(), image.get_height())
+		portrait.size = Vector2(image.get_width(), image.get_height()) * PORTRAIT_SCALE
 		var picture := TextureRect.new()
 		picture.texture = ImageTexture.create_from_image(image)
 		picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -44,7 +45,10 @@ func add_faces(faces: Array, capture_order: int) -> void:
 			"index": index,
 			"anchor": Vector2(randf() * available.x, randf() * available.y),
 			"phase": Vector2(randf_range(0.0, TAU), randf_range(0.0, TAU)),
-			"speed": Vector2(randf_range(0.4, 1.0), randf_range(0.4, 1.0)),
+			"speed": Vector2(
+				randf_range(0.8, 30.0),
+				randf_range(0.8, 30.0)
+			),
 		})
 	_portraits.sort_custom(_older_first)
 	while _portraits.size() > maxi(max_portraits, 1):

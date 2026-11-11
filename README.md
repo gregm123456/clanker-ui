@@ -411,8 +411,10 @@ not continuously fetch images.
 Each floating portrait's depth-cycle re-entry triggers face extraction from its camera:
 the local camera supplies its current frame, while remote cameras supply a fresh snapshot
 from their owning peers. Frames are sent asynchronously to the configured Hailo
-`/v1/attributes` service. Every returned face crop is displayed at its original pixel
-size in a gently moving foreground overlay spanning the display. The latest 10 crops
+`/v1/attributes` service. Every returned face crop is displayed at 1.5 times its original
+pixel dimensions in a moving foreground overlay spanning the display. Each axis jiggles at
+an independently randomized speed, ranging from the previous speeds to roughly 10 times
+their maximum. The latest 10 crops
 across cameras are retained by default; repeated appearances of the same person are
 kept. Nothing is written to disk by the app.
 

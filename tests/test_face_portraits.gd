@@ -201,20 +201,34 @@ func _test_overlay() -> void:
 	_check(overlay._root.size == Vector2(root.size), "Overlay does not cover the physical window")
 	var image := Image.create(13, 17, false, Image.FORMAT_RGB8)
 	var face := {"image": image, "label": "?"}
+	seed(28757)
 	overlay.add_faces([face, face], 2)
 	overlay.add_faces([face], 3)
 	overlay.add_faces([face], 1)
 	_check(overlay._portraits.size() == 3, "Portrait limit was not enforced")
 	_check(overlay._portraits[0]["order"] == 2 and overlay._portraits[2]["order"] == 3, "Out-of-order completion evicted a newer crop")
 	var portrait: Control = overlay._portraits[0]["node"]
-	_check(portrait.size == Vector2(13, 17), "Overlay resized the face crop")
-	_check((portrait.get_child(0) as TextureRect).size == Vector2(13, 17), "Displayed texture resized the crop")
+	_check(portrait.size == Vector2(19.5, 25.5), "Portrait was not displayed at 1.5 times the crop dimensions")
+	_check((portrait.get_child(0) as TextureRect).size == Vector2(19.5, 25.5), "Displayed texture was not scaled")
+	_check(image.get_size() == Vector2i(13, 17), "Source crop dimensions changed")
 	_check((portrait.get_child(1) as Label).text == "?", "Portrait label missing")
 	overlay._process(0.0)
 	var initial := portrait.position
 	overlay._process(0.5)
 	_check(portrait.position.distance_to(initial) <= 2.0 * sqrt(2.0) * Overlay.JIGGLE_PIXELS, "Jiggle exceeded its bound")
 	_check(portrait.position.x >= 0.0 and portrait.position.y >= 0.0, "Portrait escaped the display")
+	overlay.max_portraits = 200
+	var faces: Array = []
+	faces.resize(200)
+	faces.fill(face)
+	overlay.add_faces(faces, 4)
+	var speeds: Array = []
+	for entry: Dictionary in overlay._portraits:
+		var speed: Vector2 = entry["speed"]
+		_check(speed.x >= 0.8 and speed.x <= 30.0 and speed.y >= 0.8 and speed.y <= 30.0, "Jiggle speed is outside the expected range")
+		speeds.append(speed.x)
+		speeds.append(speed.y)
+	_check(speeds.min() < 3.0 and speeds.max() > 27.0, "Jiggle speeds do not span the previous range through approximately 10x")
 	overlay.queue_free()
 	root.size = original_size
 	root.content_scale_size = original_scale_size
