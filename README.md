@@ -1,8 +1,38 @@
 # clankerUI
 
-A Godot 4 project featuring a spinning, shader-driven 3D cube interface with live webcam feed texture mapping.
+clankerUI is a Godot 4 experience for turning one or more displays into windows onto a
+shared, animated 3D scene. Objects move through the scene, while a shader-driven cube
+shows a live camera feed. Each display can show its calibrated part of the virtual
+space, so the installation feels like one continuous world rather than a collection
+of separate screens.
 
-## Features & Hardware Compatibility
+The Godot scene is the experience: it renders the world, handles movement and input,
+and displays local camera video. Supporting services let multiple Raspberry Pis share
+object state, use per-display installation settings, and show a still from another
+node's camera when a remote object comes into view. You can run the project on a
+desktop to explore and edit the scene, or deploy it to Raspberry Pi for an installation.
+
+## Contents
+
+- [The experience and hardware](#features-and-hardware-compatibility)
+- [Run in development](#run-development)
+- [Refresh the Godot class cache](#refresh-the-godot-class-cache)
+- [Configure the Godot scene and object movement](#configure-the-3d-space-and-objects)
+  - [World axes and movement](#world-axes-and-movement)
+- [Configure each installation node](#per-node-installation-config-userinstallationcfg)
+  - [Drive two portrait displays from one Pi](#one-pi-driving-two-portrait-displays)
+  - [Automatic startup](#automatic-startup-on-the-two-pis)
+  - [Shared screen-edge wrapping](#shared-screen-edge-wrapping)
+  - [Remote webcam snapshots](#one-shot-remote-webcam-snapshots)
+- [Runtime architecture and network protocol](#runtime-architecture)
+- [Standalone Raspberry Pi deployment](#standalone-on-raspberry-pi)
+  - [Export the project](#1-export-the-godot-project)
+  - [Build the CSI camera extension](#2-build-the-csi-camera-native-extension-one-time-on-the-pi)
+  - [Run](#3-run)
+  - [Troubleshooting](#troubleshooting)
+- [License](#license)
+
+## Features and hardware compatibility
 
 - **Raspberry Pi 5 & Single Board Computers**: Runs in full screen using Vulkan (Mobile) or OpenGL ES (GL Compatibility) rendering.
 - **Display Adaptability**: Dynamically adapts to any display size, resolution, and orientation (landscape, portrait, ultrawide, square) connected to the Raspberry Pi.
@@ -16,17 +46,30 @@ A Godot 4 project featuring a spinning, shader-driven 3D cube interface with liv
   - `M`: Toggle mouse pointer visibility.
   - `Escape`: Quit application.
 
-## ⚠️ Required after every `git pull` / merge: refresh the Godot class cache
+## Run (development)
 
-Godot caches all `class_name` script registrations in
-`.godot/global_script_class_cache.cfg`. This cache is **not** rebuilt
+Open the project in Godot 4.7 or later, then run `main.tscn`.
+
+```bash
+godot --main-scene res://main.tscn
+```
+
+On macOS/Windows/iOS, or on Linux with only a USB webcam attached, this uses the built-in
+`CameraServer` path with no extra setup. The native CSI extension only loads on Linux
+(`addons/csi_camera/csi_camera.gdextension` restricts its library entries to
+`linux.arm64`), so it is skipped on other platforms.
+
+## Refresh the Godot class cache
+
+After every `git pull` or merge, refresh the class cache. Godot stores `class_name`
+registrations in `.godot/global_script_class_cache.cfg`. This cache is **not** rebuilt
 automatically when you run the project from the command line
 (`Godot --main-scene res://main.tscn`) — it's only rebuilt when the editor
 itself does a project scan.
 
-If you pull/merge a change that adds, removes, or renames a `class_name`
-script (e.g. `MeshCalibrationModel`, `InstallationGeometry`) and the cache is
-stale, `spinning_cube.gd` fails to compile with errors such as:
+If a pull/merge adds, removes, or renames a `class_name` script (e.g.
+`MeshCalibrationModel`, `InstallationGeometry`) and the cache is stale,
+`spinning_cube.gd` fails to compile with errors such as:
 
 ```
 SCRIPT ERROR: Parse Error: Could not find type "MeshCalibrationModel" in the current scope.
@@ -49,6 +92,99 @@ that rescans the project and rewrites `.godot/global_script_class_cache.cfg`.
 Set `GODOT_BIN=/path/to/Godot` if your Godot binary isn't at the default macOS
 location or on `PATH`. Make this a routine step in your pull workflow — it's
 cheap and safe to run even when nothing changed.
+
+## Configure the 3D space and objects
+
+The 3D space is the scene made from `Node3D` nodes. In the editor, open `main.tscn` and
+select a node in the Scene dock. Set its properties in the Inspector, or edit the same
+values in the scene file when making repeatable deployments.
+
+### World axes and movement
+
+- **World axes**: `+X` = right, `+Y` = up, `+Z` = toward camera (default camera forward is `-Z`).
+- **Movement vectors** (`move_velocity`, `move_acceleration`) are interpreted in **world space**, not camera-relative space.
+- **Bounds modes**:
+  - `2D Viewport Wrap` evaluates camera-relative X/Y viewport extents.
+  - `3D Volume Bounds` evaluates world-space bounds, intended to align with physical installation geometry (`InstallationGeometry` resource) and supports both wrap and hard-wall clamp behavior.
+- **Determinism path**: enable `use_fixed_step_movement` to run motion integration in `_physics_process` for fixed-step updates.
+
+### Space parameters
+
+These nodes define the space in the default scene:
+
+| Node | Parameters to set | Effect |
+| --- | --- | --- |
+| `Camera3D` | `Transform > Position`, `Transform > Rotation`, `Fov` | Defines the viewer, camera angle, distance, and perspective. The default camera is at `(0, 0, 4)`, looking along `-Z`, with a `65` degree field of view. |
+| `WorldEnvironment` | `Environment > Background`, ambient light, tonemapping, glow | Defines the background and global lighting response. |
+| `DirectionalLight3D` and `DirectionalLight3D_Fill` | `Transform > Rotation`, `Light Color`, `Light Energy`, shadows | Defines the direction, color, and strength of the scene lights. |
+| `SpinningCube` | `Transform > Position`, `Transform > Rotation`, `Mesh` | Defines the object's starting transform and visible geometry. |
+
+For a different object, add a `Node3D` or `MeshInstance3D` under `Main`, assign a mesh,
+and set its transform. A `Node3D` transform is composed of:
+
+- **Position**: local translation `(x, y, z)`. With the default `Main` root at the origin,
+  this is also the object's initial world position.
+- **Rotation**: local Euler angles around X, Y, and Z. Godot's Inspector displays degrees;
+  GDScript rotation methods use radians.
+- **Scale**: local size multiplier `(x, y, z)`. Keep the scale at `(1, 1, 1)` when the
+  mesh's own dimensions should control its size.
+
+The `BoxMesh` size is separate from the node transform. For example, set `BoxMesh > Size`
+to `(4.25, 4.25, 0.05)` to change the mesh dimensions, or set `SpinningCube > Transform
+> Scale` to change the whole object including its children.
+
+### Object movement and rotation
+
+Select `SpinningCube` and set these exported properties:
+
+| Property | Type and units | Meaning |
+| --- | --- | --- |
+| `tumble_speed` | `Vector3`, radians/second | Continuous rotation speed around X, Y, and Z. For example `(0, 1.0, 0)` rotates around Y only. A negative value reverses that axis. |
+| `move_velocity` | `Vector3`, world units/second | Initial movement velocity on X, Y, and Z. For example `(0.5, 1.0, 0)` moves right and up without moving toward or away from the camera. |
+| `move_acceleration` | `Vector3`, world units/second squared | Added to velocity every update. Use `(0, 0, 0)` for constant velocity. |
+| `use_fixed_step_movement` | Boolean | Updates movement in `_physics_process` for more repeatable fixed-step motion. |
+| `enable_wraparound` | Boolean | Enables the selected boundary strategy. |
+| `bounds_mode` | `None`, `2D Viewport Wrap`, or `3D Volume Bounds` | Chooses whether the object has no bounds, wraps against the camera-relative viewport, or uses a world-space volume. |
+| `wrap_margin` | World units | Extra distance beyond the visible 2D viewport before the object wraps. It does not change 3D volume bounds. |
+| `bounds_behavior` | `Wrap` or `Hard Wall Clamp` | For `3D Volume Bounds`, either teleports the object to the opposite side or clamps it at the wall. |
+| `bounds_volume_center` | `Vector3`, world units | Center of the 3D bounds volume when no `InstallationGeometry` resource is assigned. |
+| `bounds_volume_half_extents` | `Vector3`, world units | Half-width, half-height, and half-depth of the 3D bounds volume. The full volume is `center +/- half_extents`. |
+
+The runtime applies movement each update in this order:
+
+1. Rotate the object using `tumble_speed * delta` around X, Y, and Z.
+2. Update velocity using `move_velocity += move_acceleration * delta`.
+3. Translate the object using `position += move_velocity * delta`.
+4. Apply the selected viewport or 3D-volume bounds rule.
+
+The object starts with the Position and Rotation values saved in the scene, then movement
+changes its transform while the application runs. The current `spinning_cube.gd` also
+randomizes `tumble_speed` and `move_velocity` during startup. To make Inspector values
+remain exact, remove or disable that `randomize_speed_and_velocity()` call before relying
+on fixed motion values.
+
+### Example scene values
+
+The following is the relevant shape of a `.tscn` configuration. `Vector3` values use
+`(x, y, z)` order, and rotation values written in a scene file use radians:
+
+```ini
+[node name="SpinningCube" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0, 0)
+rotation = Vector3(0, 0, 0)
+scale = Vector3(1, 1, 1)
+tumble_speed = Vector3(0, 0.7, 0)
+move_velocity = Vector3(0.5, 1.0, 0)
+move_acceleration = Vector3(0, 0, 0)
+enable_wraparound = true
+bounds_mode = 1
+wrap_margin = 0.3
+```
+
+For a 3D installation volume, use `bounds_mode = 2`, set `bounds_behavior` to `0` for
+wrap or `1` for hard-wall clamping, and configure `bounds_volume_center` and
+`bounds_volume_half_extents`. An `InstallationGeometry` resource can be assigned instead
+when the same physical bounds should be shared by multiple objects.
 
 ## Per-node installation config (`user://installation.cfg`)
 
@@ -289,112 +425,6 @@ The TCP snapshot wire format is deliberately not HTTP: send UTF-8 `GET /snapshot
 little-endian uint32 JPEG length, then read exactly that many JPEG bytes. The maximum accepted
 JPEG is 20 MiB. A closed connection means the request failed; clients retain the previous still
 or neutral proxy material and do not retry continuously while the proxy remains visible.
-
-## World axis and movement conventions
-
-- **World axes**: `+X` = right, `+Y` = up, `+Z` = toward camera (default camera forward is `-Z`).
-- **Movement vectors** (`move_velocity`, `move_acceleration`) are interpreted in **world space**, not camera-relative space.
-- **Bounds modes**:
-  - `2D Viewport Wrap` evaluates camera-relative X/Y viewport extents.
-  - `3D Volume Bounds` evaluates world-space bounds, intended to align with physical installation geometry (`InstallationGeometry` resource) and supports both wrap and hard-wall clamp behavior.
-- **Determinism path**: enable `use_fixed_step_movement` to run motion integration in `_physics_process` for fixed-step updates.
-
-## Configure the 3D space and objects
-
-The 3D space is the scene made from `Node3D` nodes. In the editor, open `main.tscn` and
-select a node in the Scene dock. Set its properties in the Inspector, or edit the same
-values in the scene file when making repeatable deployments.
-
-### Space parameters
-
-These nodes define the space in the default scene:
-
-| Node | Parameters to set | Effect |
-| --- | --- | --- |
-| `Camera3D` | `Transform > Position`, `Transform > Rotation`, `Fov` | Defines the viewer, camera angle, distance, and perspective. The default camera is at `(0, 0, 4)`, looking along `-Z`, with a `65` degree field of view. |
-| `WorldEnvironment` | `Environment > Background`, ambient light, tonemapping, glow | Defines the background and global lighting response. |
-| `DirectionalLight3D` and `DirectionalLight3D_Fill` | `Transform > Rotation`, `Light Color`, `Light Energy`, shadows | Defines the direction, color, and strength of the scene lights. |
-| `SpinningCube` | `Transform > Position`, `Transform > Rotation`, `Mesh` | Defines the object's starting transform and visible geometry. |
-
-For a different object, add a `Node3D` or `MeshInstance3D` under `Main`, assign a mesh,
-and set its transform. A `Node3D` transform is composed of:
-
-- **Position**: local translation `(x, y, z)`. With the default `Main` root at the origin,
-  this is also the object's initial world position.
-- **Rotation**: local Euler angles around X, Y, and Z. Godot's Inspector displays degrees;
-  GDScript rotation methods use radians.
-- **Scale**: local size multiplier `(x, y, z)`. Keep the scale at `(1, 1, 1)` when the
-  mesh's own dimensions should control its size.
-
-The `BoxMesh` size is separate from the node transform. For example, set `BoxMesh > Size`
-to `(4.25, 4.25, 0.05)` to change the mesh dimensions, or set `SpinningCube > Transform
-> Scale` to change the whole object including its children.
-
-### Object movement and rotation
-
-Select `SpinningCube` and set these exported properties:
-
-| Property | Type and units | Meaning |
-| --- | --- | --- |
-| `tumble_speed` | `Vector3`, radians/second | Continuous rotation speed around X, Y, and Z. For example `(0, 1.0, 0)` rotates around Y only. A negative value reverses that axis. |
-| `move_velocity` | `Vector3`, world units/second | Initial movement velocity on X, Y, and Z. For example `(0.5, 1.0, 0)` moves right and up without moving toward or away from the camera. |
-| `move_acceleration` | `Vector3`, world units/second squared | Added to velocity every update. Use `(0, 0, 0)` for constant velocity. |
-| `use_fixed_step_movement` | Boolean | Updates movement in `_physics_process` for more repeatable fixed-step motion. |
-| `enable_wraparound` | Boolean | Enables the selected boundary strategy. |
-| `bounds_mode` | `None`, `2D Viewport Wrap`, or `3D Volume Bounds` | Chooses whether the object has no bounds, wraps against the camera-relative viewport, or uses a world-space volume. |
-| `wrap_margin` | World units | Extra distance beyond the visible 2D viewport before the object wraps. It does not change 3D volume bounds. |
-| `bounds_behavior` | `Wrap` or `Hard Wall Clamp` | For `3D Volume Bounds`, either teleports the object to the opposite side or clamps it at the wall. |
-| `bounds_volume_center` | `Vector3`, world units | Center of the 3D bounds volume when no `InstallationGeometry` resource is assigned. |
-| `bounds_volume_half_extents` | `Vector3`, world units | Half-width, half-height, and half-depth of the 3D bounds volume. The full volume is `center +/- half_extents`. |
-
-The runtime applies movement each update in this order:
-
-1. Rotate the object using `tumble_speed * delta` around X, Y, and Z.
-2. Update velocity using `move_velocity += move_acceleration * delta`.
-3. Translate the object using `position += move_velocity * delta`.
-4. Apply the selected viewport or 3D-volume bounds rule.
-
-The object starts with the Position and Rotation values saved in the scene, then movement
-changes its transform while the application runs. The current `spinning_cube.gd` also
-randomizes `tumble_speed` and `move_velocity` during startup. To make Inspector values
-remain exact, remove or disable that `randomize_speed_and_velocity()` call before relying
-on fixed motion values.
-
-### Example scene values
-
-The following is the relevant shape of a `.tscn` configuration. `Vector3` values use
-`(x, y, z)` order, and rotation values written in a scene file use radians:
-
-```ini
-[node name="SpinningCube" type="MeshInstance3D" parent="."]
-position = Vector3(0, 0, 0)
-rotation = Vector3(0, 0, 0)
-scale = Vector3(1, 1, 1)
-tumble_speed = Vector3(0, 0.7, 0)
-move_velocity = Vector3(0.5, 1.0, 0)
-move_acceleration = Vector3(0, 0, 0)
-enable_wraparound = true
-bounds_mode = 1
-wrap_margin = 0.3
-```
-
-For a 3D installation volume, use `bounds_mode = 2`, set `bounds_behavior` to `0` for
-wrap or `1` for hard-wall clamping, and configure `bounds_volume_center` and
-`bounds_volume_half_extents`. An `InstallationGeometry` resource can be assigned instead
-when the same physical bounds should be shared by multiple objects.
-
-## Run (development)
-
-Open the project in Godot 4.7 or later, then run `main.tscn`.
-
-```bash
-godot --main-scene res://main.tscn
-```
-
-On macOS/Windows/iOS, or on Linux with only a USB webcam attached, this uses the built-in
-`CameraServer` path with no extra setup. The native CSI extension only loads on Linux
-(`addons/csi_camera/csi_camera.gdextension` restricts its library entries to
-`linux.arm64`), so it is silently skipped everywhere else.
 
 ## Standalone on Raspberry Pi
 
