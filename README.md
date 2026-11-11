@@ -407,8 +407,9 @@ The snapshot server captures the current CPU-readable frame from the configured 
 provider. The client decodes it into an `ImageTexture` and applies it to the proxy's shader.
 Requests are polled asynchronously, have a short timeout, and are deduplicated per object while
 in flight. A failed fetch leaves the proxy's existing neutral material or previous still intact.
-The renderer only triggers on an outside-to-inside visibility transition, so a visible proxy does
-not continuously fetch images.
+The renderer requests a snapshot on an outside-to-inside visibility transition and retries every
+five seconds while the proxy remains visible until a fetch succeeds. Successful snapshots are not
+continuously refreshed until the next visibility transition.
 
 ### Face portraits
 
@@ -451,7 +452,7 @@ and an appropriate service endpoint.
 - `scripts/mesh_network_bridge.gd` connects the generic UDP envelope to `MeshSyncService`, forwards local spawn/calibration/transform updates, applies remote messages under an echo-prevention guard, and tracks peer heartbeat timeouts.
 - `scripts/webcam_snapshot_server.gd` serves one JPEG still per TCP request without blocking the scene loop.
 - `scripts/webcam_snapshot_client.gd` fetches and decodes one remote JPEG asynchronously.
-- `scripts/remote_object_renderer.gd` requests snapshots on frustum-entry transitions and applies returned textures to proxy materials.
+- `scripts/remote_object_renderer.gd` requests snapshots on frustum entry, retries unsuccessful visible requests, and applies returned textures to proxy materials.
 
 The Phase 3 UDP envelope is:
 
@@ -464,7 +465,9 @@ sequence and incarnation fields for updated floating-portrait peers. Calibration
 dictionary form of `MeshCalibrationModel`; spawn and despawn payloads include `object_id`.
 Unknown message types, unsupported versions, malformed JSON, and invalid payload shapes are
 dropped without terminating the receiver. The network bridge is generic and does not render
-remote objects; Phase 4 owns that scene behavior.
+remote objects; Phase 4 owns that scene behavior. In addition to heartbeat-driven peer detection,
+each client re-advertises its local calibration, object descriptors and latest transforms every
+five seconds, so peers can recover from a quick restart or a lost UDP state packet.
 
 The envelope is the stable interoperability boundary for future clients: `sender_peer_id` is
 the process identity, while `payload.object_id` identifies a shared object. A `spawn` payload
@@ -478,7 +481,7 @@ UDP destination port; snapshot requests always use the remote node's `snapshot_t
 The TCP snapshot wire format is deliberately not HTTP: send UTF-8 `GET /snapshot\n`, read a
 little-endian uint32 JPEG length, then read exactly that many JPEG bytes. The maximum accepted
 JPEG is 20 MiB. A closed connection means the request failed; clients retain the previous still
-or neutral proxy material and do not retry continuously while the proxy remains visible.
+or neutral proxy material and retry at five-second intervals while the proxy remains visible.
 
 ## Standalone on Raspberry Pi
 

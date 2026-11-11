@@ -6,6 +6,7 @@ signal portrait_cycle_observed(object_id, owner_peer_id)
 
 const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
 const SUPPORTED_DESCRIPTOR_KINDS := ["mesh_instance"]
+const SNAPSHOT_RETRY_INTERVAL_SEC: float = 5.0
 
 var _mesh_sync_service
 var _local_object_id: String = ""
@@ -40,8 +41,9 @@ func apply_snapshot(object_id: String, texture: Texture2D) -> void:
 	material.set_shader_parameter("webcam_cbcr_texture", null)
 	material.set_shader_parameter("webcam_mode", 1)
 	material.set_shader_parameter("use_front_texture", false)
+	state["snapshot_retry_pending"] = false
 
-func process(_delta: float) -> void:
+func process(delta: float) -> void:
 	if _mesh_sync_service == null:
 		return
 	for object_id_variant in _proxy_states.keys():
@@ -56,6 +58,10 @@ func process(_delta: float) -> void:
 		state["is_visible"] = currently_visible
 		if not was_visible and currently_visible:
 			_request_snapshot(object_id, String(state.get("owner_peer_id", "")))
+		elif currently_visible and bool(state.get("snapshot_retry_pending", false)):
+			state["snapshot_retry_remaining"] = float(state.get("snapshot_retry_remaining", 0.0)) - delta
+			if float(state["snapshot_retry_remaining"]) <= 0.0:
+				_request_snapshot(object_id, String(state.get("owner_peer_id", "")))
 
 func shutdown() -> void:
 	_disconnect_service_signals()
@@ -270,6 +276,10 @@ func _is_object_visible_to_camera(position: Vector3) -> bool:
 func _request_snapshot(object_id: String, owner_peer_id: String) -> void:
 	if object_id.is_empty():
 		return
+	var state: Dictionary = _proxy_states.get(object_id, {})
+	if not state.is_empty():
+		state["snapshot_retry_pending"] = true
+		state["snapshot_retry_remaining"] = SNAPSHOT_RETRY_INTERVAL_SEC
 	if _snapshot_callback.is_valid():
 		_snapshot_callback.call(object_id, owner_peer_id)
 	snapshot_requested.emit(object_id, owner_peer_id)

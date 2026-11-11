@@ -4,6 +4,7 @@ extends Node
 const MeshCalibrationModelScript = preload("res://scripts/mesh_calibration_model.gd")
 const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 const UdpMeshTransportScript = preload("res://scripts/udp_mesh_transport.gd")
+const STATE_REPLAY_INTERVAL_SEC: float = 5.0
 
 var _mesh_sync_service
 var _transport
@@ -12,6 +13,7 @@ var _local_peer_id: String = ""
 var _heartbeat_interval_sec: float = 2.0
 var _peer_timeout_sec: float = 15.0
 var _heartbeat_elapsed: float = 0.0
+var _state_replay_elapsed: float = 0.0
 var _last_seen_by_peer: Dictionary = {}
 var _applying_remote: bool = false
 var _local_calibration: MeshCalibrationModel
@@ -40,6 +42,10 @@ func _process(delta: float) -> void:
 	if _heartbeat_elapsed >= _heartbeat_interval_sec:
 		_heartbeat_elapsed = 0.0
 		_transport.send("heartbeat", {})
+	_state_replay_elapsed += delta
+	if _state_replay_elapsed >= STATE_REPLAY_INTERVAL_SEC:
+		_state_replay_elapsed = 0.0
+		_replay_local_state()
 	var now := Time.get_ticks_msec() / 1000.0
 	for peer_id_variant in _last_seen_by_peer.keys():
 		var peer_id := String(peer_id_variant)
@@ -83,6 +89,7 @@ func send_object_transform(payload: Dictionary) -> void:
 func send_object_despawn(object_id: String) -> void:
 	if not _can_send() or object_id.is_empty() or _applying_remote:
 		return
+	_local_objects.erase(object_id)
 	_transport.send("despawn", {"object_id": object_id})
 
 func get_address_book():
