@@ -34,13 +34,23 @@ func _ready() -> void:
 	print("[display] session=", OS.get_environment("XDG_SESSION_TYPE"), " backend=", DisplayServer.get_name(), " requested=", _window_rect, " gap_px=", layout["gap_pixels"])
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true)
-	DisplayServer.window_set_size(_window_rect.size)
-	DisplayServer.window_set_position(_window_rect.position)
+	await get_tree().create_timer(0.5).timeout
+	# Resize the root viewport as well as the native window.
+	get_window().size = _window_rect.size
+	get_window().position = _window_rect.position
 	await get_tree().create_timer(0.5).timeout
 	var actual := Rect2i(DisplayServer.window_get_position(), DisplayServer.window_get_size())
 	print("[display] actual window=", actual)
 	if actual != _window_rect:
 		_start_single_display("Window manager did not honor the requested spanning rectangle")
+		return
+	_original_scale_mode = get_window().content_scale_mode
+	get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	var viewport_size := get_viewport().get_visible_rect().size
+	print("[display] root viewport=", viewport_size)
+	if get_window().size != _window_rect.size or viewport_size != Vector2(_window_rect.size):
+		get_window().content_scale_mode = _original_scale_mode
+		_start_single_display("Root viewport did not resize to the spanning window")
 		return
 	_start_combined_display(layout)
 
@@ -69,8 +79,6 @@ func _start_single_display(reason: String) -> void:
 
 func _start_combined_display(layout: Dictionary) -> void:
 	_combined = true
-	_original_scale_mode = get_window().content_scale_mode
-	get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
 	_scene_viewport = SubViewport.new()
 	_scene_viewport.name = "CombinedWorld"
 	_scene_viewport.size = layout["virtual_size"]
@@ -92,6 +100,14 @@ func _start_combined_display(layout: Dictionary) -> void:
 	_add_panel(texture, layout["left_region"], Vector2i.ZERO)
 	_add_panel(texture, layout["right_region"], Vector2i(layout["panel_size"].x, 0))
 	_input_controller.apply_startup_state(false, cube.hide_mouse_cursor)
+	if OS.get_cmdline_user_args().has("--calibrate-display"):
+		await get_tree().process_frame
+		print("[display] root visible=", get_viewport().get_visible_rect(), " window size=", get_window().size,
+			" canvas=", get_viewport().get_canvas_transform(), " screen=", get_viewport().get_screen_transform(),
+			" scene size=", _scene_viewport.size)
+		for child in get_children():
+			if child is TextureRect:
+				print("[display] panel rect=", child.get_global_rect(), " region=", child.texture.region)
 
 func _exit_tree() -> void:
 	if _combined:
@@ -130,8 +146,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var key := event as InputEventKey
 		if key.keycode == KEY_F11 or (key.keycode == KEY_ENTER and key.alt_pressed):
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-			DisplayServer.window_set_size(_window_rect.size)
-			DisplayServer.window_set_position(_window_rect.position)
+			get_window().size = _window_rect.size
+			get_window().position = _window_rect.position
 			get_viewport().set_input_as_handled()
 			return
 	_input_controller.handle_input(event, get_tree())

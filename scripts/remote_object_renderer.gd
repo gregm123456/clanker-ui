@@ -48,6 +48,10 @@ func process(_delta: float) -> void:
 		if instance == null or _camera == null:
 			continue
 		var currently_visible := _is_object_visible_to_camera(instance.global_position)
+		var descriptor: Dictionary = state.get("descriptor", {})
+		var render_config: Dictionary = descriptor.get("render_config", {})
+		if bool(render_config.get("portrait_depth_fade", false)):
+			currently_visible = currently_visible and instance.global_position.z > float(render_config.get("portrait_origin_z", 0.0)) - 9.0
 		var was_visible := bool(state.get("is_visible", false))
 		state["is_visible"] = currently_visible
 		if not was_visible and currently_visible:
@@ -166,6 +170,9 @@ func _create_proxy_for_descriptor(object_id: String, descriptor: Dictionary) -> 
 	var material := ShaderMaterial.new()
 	material.shader = load("res://cube_shader.gdshader")
 	material.set_shader_parameter("cube_size", box_mesh.size)
+	var render_config: Dictionary = descriptor.get("render_config", {})
+	material.set_shader_parameter("portrait_depth_fade", bool(render_config.get("portrait_depth_fade", false)))
+	material.set_shader_parameter("portrait_origin_z", float(render_config.get("portrait_origin_z", 0.0)))
 	material.set_shader_parameter("use_front_texture", false)
 	material.set_shader_parameter("webcam_mode", 0)
 	material.set_shader_parameter("webcam_fit_mode", 0)

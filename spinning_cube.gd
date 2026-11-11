@@ -16,6 +16,9 @@ const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
 
+## Use a readable upright wobble with a short depth exit and return.
+@export var floating_portrait: bool = false
+
 ## Velocity of the cube in world space (+X = right, +Y = up, +Z = toward camera)
 @export var move_velocity: Vector3 = Vector3(2.2, 1.4, 0.0)
 
@@ -108,6 +111,8 @@ func _ready() -> void:
 	camera = get_viewport().get_camera_3d()
 	_apply_runtime_configuration()
 	_configure_components()
+	if floating_portrait:
+		_movement_controller.initialize_portrait(self)
 	_movement_controller.randomize_speed_and_velocity()
 	tumble_speed = _movement_controller.tumble_speed
 	move_velocity = _movement_controller.move_velocity
@@ -143,6 +148,8 @@ func _setup_material() -> void:
 		if mesh is BoxMesh:
 			var bm := mesh as BoxMesh
 			_mat.set_shader_parameter("cube_size", bm.size)
+		_mat.set_shader_parameter("portrait_depth_fade", floating_portrait)
+		_mat.set_shader_parameter("portrait_origin_z", global_position.z)
 		_mat.set_shader_parameter("webcam_flip_h", flip_webcam_horizontal)
 		_mat.set_shader_parameter("webcam_fit_mode", webcam_fit_mode)
 
@@ -275,6 +282,7 @@ func _configure_components() -> void:
 	_input_controller.hide_mouse_cursor = hide_mouse_cursor
 
 	_movement_controller.tumble_speed = tumble_speed
+	_movement_controller.floating_portrait = floating_portrait
 	_movement_controller.move_velocity = move_velocity
 	_movement_controller.move_acceleration = move_acceleration
 	if use_legacy_2d_velocity_adapter:
@@ -309,6 +317,7 @@ func _update_webcam_state() -> void:
 		_webcam_started = false
 
 func _configure_mesh_sync() -> void:
+	_mesh_sync_controller.floating_portrait = floating_portrait
 	calibration_model = _mesh_sync_controller.configure(
 		self,
 		camera,

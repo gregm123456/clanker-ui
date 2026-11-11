@@ -139,6 +139,7 @@ Select `SpinningCube` and set these exported properties:
 
 | Property | Type and units | Meaning |
 | --- | --- | --- |
+| `floating_portrait` | Boolean | Uses a gentle upright wobble and a 6-second near-view hold, followed by a 1.5-second retreat and 1.5-second return. The image fades at depth; its X/Y velocity remains active. Enabled in the default scene. |
 | `tumble_speed` | `Vector3`, radians/second | Continuous rotation speed around X, Y, and Z. For example `(0, 1.0, 0)` rotates around Y only. A negative value reverses that axis. |
 | `move_velocity` | `Vector3`, world units/second | Initial movement velocity on X, Y, and Z. For example `(0.5, 1.0, 0)` moves right and up without moving toward or away from the camera. |
 | `move_acceleration` | `Vector3`, world units/second squared | Added to velocity every update. Use `(0, 0, 0)` for constant velocity. |
@@ -150,12 +151,19 @@ Select `SpinningCube` and set these exported properties:
 | `bounds_volume_center` | `Vector3`, world units | Center of the 3D bounds volume when no `InstallationGeometry` resource is assigned. |
 | `bounds_volume_half_extents` | `Vector3`, world units | Half-width, half-height, and half-depth of the 3D bounds volume. The full volume is `center +/- half_extents`. |
 
-The runtime applies movement each update in this order:
+With `floating_portrait` disabled, the runtime applies movement each update in this order:
 
 1. Rotate the object using `tumble_speed * delta` around X, Y, and Z.
 2. Update velocity using `move_velocity += move_acceleration * delta`.
 3. Translate the object using `position += move_velocity * delta`.
 4. Apply the selected viewport or 3D-volume bounds rule.
+
+With it enabled, wobble is bounded relative to the starting rotation, depth is
+controlled by the portrait cycle, and only the X/Y components of `move_velocity`
+are used. `tumble_speed` and `move_acceleration` do not apply. Both local and
+remote objects fade based on their shared world depth. The depth cycle travels
+10 world units behind the starting position, so any 3D depth bounds must include
+that range. Disable `floating_portrait` to retain the original tumbling motion.
 
 The object starts with the Position and Rotation values saved in the scene, then movement
 changes its transform while the application runs. The current `spinning_cube.gd` also
@@ -299,7 +307,8 @@ config does not. The socket and display names above are specific to the tested
 session; use the actual desktop session's values if they differ.
 
 Check the startup log for `backend=X11`, the two 600×1024 screen rectangles,
-and matching requested and actual spanning windows. If the log says `X11
+matching requested and actual spanning windows, and a 1200×1024 root viewport.
+The window dimensions alone do not guarantee that the viewport resized. If the log says `X11
 Display is not available`, check the graphical session and its environment. If
 the app warns that the screens are not adjacent and equally sized or that the
 window placement failed, it falls back to one screen; check the desktop display

@@ -10,6 +10,7 @@ var mesh_node_id: String = "local_display"
 var mesh_peer_id: String = "local"
 var shared_object_id: String = "spinning_cube"
 var calibration_model: MeshCalibrationModel
+var floating_portrait: bool = false
 
 var _owns_default_calibration_model: bool = false
 var _camera: Camera3D
@@ -98,6 +99,9 @@ func _publish_object_descriptor() -> void:
 	if not enabled:
 		return
 
+	var size := Vector3(1.8, 1.8, 0.1)
+	if _target.mesh is BoxMesh:
+		size = (_target.mesh as BoxMesh).size
 	var descriptor := {
 		"authority": "single_owner",
 		"kind": "mesh_instance",
@@ -105,7 +109,10 @@ func _publish_object_descriptor() -> void:
 		"render_config": {
 			"camera_texture_source": "local_only",
 			"shader": "cube_shader",
-			"mesh_type": "box"
+			"mesh_type": "box",
+			"size": [size.x, size.y, size.z],
+			"portrait_depth_fade": floating_portrait,
+			"portrait_origin_z": _target.global_position.z
 		},
 		"audio_config": {},
 		"media_streams": []

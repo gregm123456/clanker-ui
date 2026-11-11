@@ -20,11 +20,15 @@ uniform float border_thickness : hint_range(0.0, 0.1) = 0.035;
 uniform float roughness : hint_range(0.0, 1.0) = 0.3;
 uniform float metallic : hint_range(0.0, 1.0) = 0.15;
 uniform vec3 cube_size = vec3(1.8, 1.8, 1.8);
+uniform bool portrait_depth_fade = false;
+uniform float portrait_origin_z = 0.0;
 
 varying vec3 v_local_pos;
+varying float v_object_z;
 
 void vertex() {
 	v_local_pos = VERTEX;
+	v_object_z = MODEL_MATRIX[3].z;
 }
 
 // Convert YCbCr (macOS AVFoundation bi-planar) to standard RGB
@@ -141,4 +145,5 @@ void fragment() {
 	ALBEDO = base_color;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
+	ALPHA = portrait_depth_fade ? smoothstep(portrait_origin_z - 9.0, portrait_origin_z - 5.0, v_object_z) : 1.0;
 }
