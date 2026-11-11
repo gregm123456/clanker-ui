@@ -4,6 +4,7 @@ const InstallationConfigScript = preload("res://scripts/installation_config.gd")
 const CombinedDisplayGeometryScript = preload("res://scripts/combined_display_geometry.gd")
 const CalibrationOverlayScript = preload("res://scripts/display_calibration_overlay.gd")
 const FacePortraitOverlayScript = preload("res://scripts/face_portrait_overlay.gd")
+const ControlOverlayScript = preload("res://scripts/control_overlay.gd")
 const MainScene = preload("res://main.tscn")
 
 var _combined := false
@@ -16,8 +17,10 @@ var _layout_check_elapsed := 0.0
 var _restarting := false
 var _original_scale_mode: Window.ContentScaleMode
 var _face_overlay
+var _control_overlay
 
 func _ready() -> void:
+	_control_overlay = ControlOverlayScript.install(self)
 	var config := InstallationConfigScript.new()
 	_face_overlay = FacePortraitOverlayScript.new()
 	var max_portraits := int(config.get_face_settings()["max_portraits"])
@@ -88,6 +91,7 @@ func _start_single_display(reason: String) -> void:
 
 func _start_combined_display(layout: Dictionary) -> void:
 	_combined = true
+	_control_overlay.panel_width = float(layout["panel_size"].x)
 	_scene_viewport = SubViewport.new()
 	_scene_viewport.name = "CombinedWorld"
 	_scene_viewport.size = layout["virtual_size"]

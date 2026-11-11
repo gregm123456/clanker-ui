@@ -16,14 +16,12 @@ func apply_startup_state(start_fullscreen: bool, should_hide_mouse_cursor: bool)
 	if hide_mouse_cursor:
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 
-func handle_input(event: InputEvent, tree: SceneTree) -> void:
+func handle_input(event: InputEvent, _tree: SceneTree) -> void:
 	if not (event is InputEventKey and event.is_pressed() and not event.is_echo()):
 		return
 
 	var key_event := event as InputEventKey
-	if key_event.keycode == KEY_ESCAPE:
-		tree.quit()
-	elif key_event.keycode == KEY_F11 or (key_event.keycode == KEY_ENTER and key_event.alt_pressed):
+	if key_event.keycode == KEY_F11 or (key_event.keycode == KEY_ENTER and key_event.alt_pressed):
 		_toggle_fullscreen()
 	elif key_event.keycode == KEY_M:
 		_toggle_mouse_mode()

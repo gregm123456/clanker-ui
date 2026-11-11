@@ -42,9 +42,13 @@ desktop to explore and edit the scene, or deploy it to Raspberry Pi for an insta
   entirely. This is the preferred camera source on Linux; if the extension or camera is
   unavailable, the app falls back to the USB/V4L2 `CameraServer` path automatically.
 - **Controls**:
+  - Tap the touchscreen or left-click anywhere to reveal the futuristic control bar.
+    **Hide** closes the bar; **Quit** opens a confirmation dialog. Confirm to exit
+    or cancel to return to the display. On a combined wall, the controls and
+    confirmation appear on the panel where you tapped or clicked.
   - `F11` or `Alt + Enter`: Toggle Full Screen / Windowed mode.
   - `M`: Toggle mouse pointer visibility.
-  - `Escape`: Quit application.
+  - `Escape`: Open the quit confirmation, or cancel it if already open.
 
 ## Run (development)
 
@@ -303,7 +307,7 @@ The app renders one wider virtual image and omits the gap between its two
 panel-sized slices. If layout detection or window placement fails, it logs a
 warning and starts the usual one-screen scene. A topology change during combined
 operation restarts display setup. F11/Alt-Enter restore the spanning rectangle
-in combined mode; Escape and M retain their normal functions.
+in combined mode; Escape opens the quit confirmation and M toggles the pointer.
 
 On `pi5ai2sd`, native Wayland currently reports unusable monitor positions to
 Godot 4.7.2. To launch the installed build across both displays, log in as the
