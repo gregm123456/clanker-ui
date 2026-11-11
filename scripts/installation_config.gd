@@ -89,6 +89,14 @@ func get_face_settings() -> Dictionary:
 		"max_portraits": int(_get_number("faces", "max_portraits", 10)),
 	}
 
+func get_speech_settings() -> Dictionary:
+	return {
+		"interrogation_url": _get_string("speech", "interrogation_url", "http://m5image:5000"),
+		"tts_url": _get_string("speech", "tts_url", "http://pi5ai2sd:5003/v1/audio/speech"),
+		"max_jobs": int(_get_number("speech", "max_jobs", 5)),
+		"flat_interrogation_enabled": _get_bool("speech", "flat_interrogation_enabled", false),
+	}
+
 func _load_or_create() -> void:
 	var resolved_path := ProjectSettings.globalize_path(CONFIG_PATH)
 	var file_exists := FileAccess.file_exists(resolved_path)
@@ -173,6 +181,12 @@ flip_webcam_horizontal = true
 [faces]
 service_url = "http://pi5ai2sd:5002/v1/attributes"
 max_portraits = 10
+
+[speech]
+interrogation_url = "http://m5image:5000"
+tts_url = "http://pi5ai2sd:5003/v1/audio/speech"
+max_jobs = 5
+flat_interrogation_enabled = false
 """.strip_edges()
 
 func _get_string(section: String, key: String, default_value: String) -> String:

@@ -43,7 +43,8 @@ desktop to explore and edit the scene, or deploy it to Raspberry Pi for an insta
   unavailable, the app falls back to the USB/V4L2 `CameraServer` path automatically.
 - **Controls**:
   - Tap the touchscreen or left-click anywhere to reveal the futuristic control bar.
-    **Hide** closes the bar; **Quit** opens a confirmation dialog. Confirm to exit
+    **Speech** toggles face-description audio, which starts off; **Hide** closes the
+    bar; **Quit** opens a confirmation dialog. Confirm to exit
     or cancel to return to the display. On a combined wall, the controls and
     confirmation appear on the panel where you tapped or clicked.
   - `F11` or `Alt + Enter`: Toggle Full Screen / Windowed mode.
@@ -254,6 +255,12 @@ flip_webcam_horizontal = true
 [faces]
 service_url = "http://pi5ai2sd:5002/v1/attributes"
 max_portraits = 10
+
+[speech]
+interrogation_url = "http://m5image:5000"
+tts_url = "http://pi5ai2sd:5003/v1/audio/speech"
+max_jobs = 5
+flat_interrogation_enabled = false
 ```
 
 At startup the scene applies these values as overrides to the exported defaults for:
@@ -274,6 +281,9 @@ The exported values remain the editor-time fallback when a config value is absen
 The `[faces]` values select the Hailo face-attributes endpoint and the maximum number
 of face portraits retained per app instance. The defaults also apply to existing configs
 without that section.
+The `[speech]` URLs select the image interrogation and Piper speech services;
+`max_jobs` limits outstanding descriptions, including the currently playing or
+processing face. Existing configs without this section use the defaults above.
 
 ### One Pi driving two portrait displays
 
@@ -435,6 +445,39 @@ and, for remote cameras, a working mesh connection and snapshot server. Missing 
 unreachable services and saturated requests are logged; existing portraits remain
 visible. Images are sent over HTTP to the configured host, so use a trusted network
 and an appropriate service endpoint.
+
+### Face-description speech
+
+Speech starts **off** on each client, including after a restart. Reveal the control
+bar and tap **SPEECH: OFF** to enable it. Hiding the bar does not change the setting.
+Turning speech off stops the current audio immediately and discards queued and
+in-flight work; turning it on does not describe existing portraits. Each newly
+delivered face crop is eligible, including repeated appearances of the same person.
+
+While enabled, each accepted crop is sent as a base64-encoded PNG to the structured
+interrogation endpoint. Its category winners are spoken in configured order, without
+the category names, using Piper; Godot plays the WAV response through the client's
+default audio output. Audio is played serially in arrival order. Requests and playback
+do not block portrait display.
+
+The flat interrogation endpoint is off by default. To append its caption after the
+structured winners, set `flat_interrogation_enabled = true` under `[speech]` in
+`user://installation.cfg` and restart the client. When it is enabled, if either
+interrogation fails, the other result can still be spoken.
+
+The default queue holds five total jobs. Once it fills, new arrivals are dropped
+until all accepted jobs drain, then later arrivals can be accepted again. Change
+`speech.max_jobs` in `user://installation.cfg` to use another positive limit.
+Failures and dropped jobs are logged without logging images, descriptions or audio.
+
+Edit `config/face_categories.gd` to change the five form-style category lists before
+building the app. These are deliberately fallible classifier guesses for the art
+installation, not verified demographics or identities. The structured service is
+forced to choose from the supplied options; its scores are relative to that list
+and cannot establish a person's gender, ethnicity, race, nationality or age.
+The camera crop and description are sent over HTTP to the configured services; use
+only trusted endpoints and a trusted network. Neither crops nor audio are written to
+disk by the speech client.
 
 ## Runtime architecture
 

@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 signal quit_confirmed
+signal speech_toggled(enabled: bool)
 
 const CYAN := Color(0.35, 0.9, 1.0)
 const TEXT := Color(0.84, 0.96, 1.0)
@@ -8,9 +9,14 @@ const TEXT := Color(0.84, 0.96, 1.0)
 var panel_width := 0.0
 var _root: Control
 var _bar: PanelContainer
+var _row: HBoxContainer
 var _dialog_backdrop: Control
 var _dialog: PanelContainer
 var _title: Label
+var _speech_button: Button
+var _hide_button: Button
+var _quit_button: Button
+var _compact := false
 var _was_visible_before_dialog := false
 var _previous_mouse_mode: Input.MouseMode
 var _reveal_kind := ""
@@ -34,18 +40,22 @@ func _ready() -> void:
 	_bar.name = "ControlBar"
 	_bar.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.06, 0.1, 0.94), CYAN))
 	_root.add_child(_bar)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	_bar.add_child(row)
+	_row = HBoxContainer.new()
+	_row.add_theme_constant_override("separation", 12)
+	_bar.add_child(_row)
 	_title = Label.new()
 	_title.text = "◈  CLANKER // CONTROL"
 	_title.add_theme_color_override("font_color", CYAN)
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(_title)
-	var hide_button := _make_button("HIDE", _hide_controls)
-	row.add_child(hide_button)
-	var quit_button := _make_button("QUIT", _request_quit)
-	row.add_child(quit_button)
+	_row.add_child(_title)
+	_hide_button = _make_button("HIDE", _hide_controls)
+	_row.add_child(_hide_button)
+	_quit_button = _make_button("QUIT", _request_quit)
+	_row.add_child(_quit_button)
+	_speech_button = _make_button("SPEECH: OFF", _toggle_speech)
+	_speech_button.name = "SpeechButton"
+	_speech_button.toggle_mode = true
+	_row.add_child(_speech_button)
 	_bar.hide()
 
 	_dialog_backdrop = Control.new()
@@ -98,6 +108,10 @@ func _make_button(label: String, action: Callable) -> Button:
 	button.pressed.connect(action)
 	return button
 
+func _toggle_speech() -> void:
+	_speech_button.text = "SPEECH: ON" if _speech_button.button_pressed else "SPEECH: OFF"
+	speech_toggled.emit(_speech_button.button_pressed)
+
 func _process(_delta: float) -> void:
 	_update_geometry()
 
@@ -118,9 +132,16 @@ func _update_geometry() -> void:
 		_active_panel = clampi(_active_panel, 0, maxi(ceili(size.x / panel_width) - 1, 0))
 		panel_left = float(_active_panel) * panel_width
 		available_width = minf(panel_width, maxf(0.0, size.x - panel_left))
+	var compact := available_width < 400.0
+	if compact != _compact:
+		_compact = compact
+		_row.add_theme_constant_override("separation", 8 if compact else 12)
+		for button in [_hide_button, _quit_button, _speech_button]:
+			button.custom_minimum_size.x = 64 if compact else 92
+			button.add_theme_font_size_override("font_size", 14 if compact else 16)
 	_bar.position = Vector2(panel_left, 0.0)
 	_bar.size = Vector2(available_width, 72)
-	_title.visible = available_width >= 410.0
+	_title.visible = available_width >= 560.0
 	_dialog_backdrop.size = size
 	var dialog_size := Vector2(minf(380.0, available_width), 180.0)
 	_dialog.size = dialog_size

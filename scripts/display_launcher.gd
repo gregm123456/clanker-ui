@@ -5,6 +5,7 @@ const CombinedDisplayGeometryScript = preload("res://scripts/combined_display_ge
 const CalibrationOverlayScript = preload("res://scripts/display_calibration_overlay.gd")
 const FacePortraitOverlayScript = preload("res://scripts/face_portrait_overlay.gd")
 const ControlOverlayScript = preload("res://scripts/control_overlay.gd")
+const FaceSpeechScript = preload("res://scripts/face_speech_coordinator.gd")
 const MainScene = preload("res://main.tscn")
 
 var _combined := false
@@ -18,10 +19,12 @@ var _restarting := false
 var _original_scale_mode: Window.ContentScaleMode
 var _face_overlay
 var _control_overlay
+var _face_speech
 
 func _ready() -> void:
 	_control_overlay = ControlOverlayScript.install(self)
 	var config := InstallationConfigScript.new()
+	_face_speech = FaceSpeechScript.install(self, _control_overlay, config.get_speech_settings())
 	_face_overlay = FacePortraitOverlayScript.new()
 	var max_portraits := int(config.get_face_settings()["max_portraits"])
 	if max_portraits < 1:
@@ -102,7 +105,7 @@ func _start_combined_display(layout: Dictionary) -> void:
 	var cube := scene.get_node("SpinningCube")
 	cube.start_fullscreen = false
 	cube.combined_wall = true
-	cube.face_crops_received.connect(_face_overlay.add_faces)
+	_connect_face_outputs(cube)
 	_scene_viewport.add_child(scene)
 
 	if OS.get_cmdline_user_args().has("--calibrate-display"):
@@ -125,8 +128,12 @@ func _start_combined_display(layout: Dictionary) -> void:
 
 func _add_main_scene(parent: Node) -> void:
 	var scene := MainScene.instantiate()
-	scene.get_node("SpinningCube").face_crops_received.connect(_face_overlay.add_faces)
+	_connect_face_outputs(scene.get_node("SpinningCube"))
 	parent.add_child(scene)
+
+func _connect_face_outputs(cube: Node) -> void:
+	cube.face_crops_received.connect(_face_overlay.add_faces)
+	cube.face_crops_received.connect(_face_speech.add_faces)
 
 func _exit_tree() -> void:
 	if _combined:

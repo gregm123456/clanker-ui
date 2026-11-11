@@ -2,12 +2,22 @@ extends SceneTree
 
 const Overlay = preload("res://scripts/control_overlay.gd")
 const MainScene = preload("res://main.tscn")
+const Launcher = preload("res://scripts/display_launcher.gd")
 
 class InputProbe extends Node:
 	var events: Array[InputEvent] = []
 
 	func _unhandled_input(event: InputEvent) -> void:
 		events.append(event)
+
+class CubeStub extends Node:
+	signal face_crops_received(faces, capture_order)
+
+class FaceSink extends RefCounted:
+	var calls := 0
+
+	func add_faces(_faces: Array, _order: int) -> void:
+		calls += 1
 
 var failures := 0
 var confirmations := 0
@@ -57,9 +67,29 @@ func _main_without_cube() -> Node:
 
 func _test_entry_paths() -> void:
 	var direct := _main_without_cube()
+	var cube := CubeStub.new()
+	cube.name = "SpinningCube"
+	direct.add_child(cube)
 	root.add_child(direct)
 	_check(direct.has_node("ControlOverlay"), "Direct main scene did not install its overlay")
+	_check(direct.has_node("FaceSpeech"), "Direct main scene did not install speech")
+	var speech = direct.get_node("FaceSpeech")
+	_check(cube.face_crops_received.is_connected(speech.add_faces), "Direct scene did not connect speech to face crops")
+	direct.get_node("ControlOverlay").speech_toggled.emit(true)
+	_check(speech.enabled, "Direct scene toggle did not enable speech")
 	direct.free()
+
+	var output_launcher := Launcher.new()
+	var face_sink := FaceSink.new()
+	var speech_sink := FaceSink.new()
+	output_launcher._face_overlay = face_sink
+	output_launcher._face_speech = speech_sink
+	var output_cube := CubeStub.new()
+	output_launcher._connect_face_outputs(output_cube)
+	output_cube.face_crops_received.emit([], 1)
+	_check(face_sink.calls == 1 and speech_sink.calls == 1, "Launcher did not connect both face consumers")
+	output_cube.free()
+	output_launcher.free()
 
 	var launcher := Node.new()
 	root.add_child(launcher)
@@ -90,6 +120,17 @@ func _run_tests() -> void:
 	_check(not overlay._bar.visible, "Controls must start hidden")
 	_check((root.get_screen_transform() * overlay.transform).is_equal_approx(Transform2D.IDENTITY), "Overlay is not aligned with physical pixels")
 	_check(overlay._root.size == Vector2(root.size), "Overlay does not cover the physical window")
+	overlay.panel_width = 320.0
+	overlay._update_geometry()
+	overlay._show_controls()
+	await process_frame
+	var narrow_button: Button = overlay._bar.get_child(0).get_node("SpeechButton")
+	_check(narrow_button.get_global_rect().end.x <= 320.0, "Speech button crosses a narrow panel")
+	overlay.panel_width = 560.0
+	overlay._update_geometry()
+	await process_frame
+	_check(narrow_button.get_global_rect().end.x <= 560.0, "Speech button crosses a panel with title visible")
+	overlay._hide_controls()
 	overlay.panel_width = 600.0
 	overlay._update_geometry()
 	_check(overlay._bar.position.x == 0.0 and overlay._bar.size.x == 600.0, "Bar is not confined to the first panel")
@@ -161,8 +202,18 @@ func _run_tests() -> void:
 	_check(confirmations == 1, "Confirm button did not emit exactly one quit request")
 	overlay._cancel_quit()
 	var hide_button: Button = row.get_child(1)
+	var speech_button: Button = row.get_node("SpeechButton")
+	var changes: Array = []
+	overlay.speech_toggled.connect(func(value): changes.append(value))
+	_check(not speech_button.button_pressed and speech_button.text == "SPEECH: OFF", "Speech must start off")
+	_click(speech_button)
+	_check(speech_button.button_pressed and speech_button.text == "SPEECH: ON" and changes == [true], "Speech toggle did not enable")
 	_click(hide_button)
 	_check(not overlay._bar.visible and not overlay._dialog_backdrop.visible, "Hide did not close the interface")
+	overlay._show_controls()
+	_check(speech_button.button_pressed and changes == [true], "Hiding controls changed speech state")
+	_click(speech_button)
+	_check(not speech_button.button_pressed and changes == [true, false], "Speech toggle did not disable")
 	overlay.queue_free()
 	probe.queue_free()
 	await process_frame
