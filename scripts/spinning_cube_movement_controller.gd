@@ -92,6 +92,7 @@ func process_transform(target: Node3D, delta: float, camera: Camera3D, viewport:
 func _process_portrait(target: Node3D, delta: float) -> void:
 	_portrait_elapsed += delta
 	_portrait_stage_elapsed += delta
+	var time_since_reentry := -1.0
 	while true:
 		var stage_duration := PORTRAIT_ENTRY_SECONDS if _portrait_in_entry else _portrait_hold_seconds + PORTRAIT_TRAVEL_SECONDS
 		if _portrait_stage_elapsed < stage_duration:
@@ -101,6 +102,7 @@ func _process_portrait(target: Node3D, delta: float) -> void:
 			_portrait_in_entry = false
 		else:
 			_portrait_in_entry = true
+			time_since_reentry = _portrait_stage_elapsed
 			move_velocity.x = absf(move_velocity.x) * (1.0 if randi_range(0, 1) == 1 else -1.0)
 			_portrait_hold_seconds = randf_range(PORTRAIT_MIN_HOLD_SECONDS, PORTRAIT_MAX_HOLD_SECONDS)
 	var wobble_time := _portrait_elapsed + _portrait_phase
@@ -117,13 +119,23 @@ func _process_portrait(target: Node3D, delta: float) -> void:
 		var progress := (_portrait_stage_elapsed - _portrait_hold_seconds) / PORTRAIT_TRAVEL_SECONDS
 		depth_fraction = progress * progress
 		portrait_opacity = 1.0 - smoothstep(0.94, 1.0, progress)
-	target.position += Vector3(move_velocity.x, move_velocity.y, 0.0) * delta
+	target.position.y += move_velocity.y * delta
 	var world_position := target.global_position
 	var exit_distance := PORTRAIT_EXIT_DISTANCE
 	if enable_wraparound and bounds_mode in [SpinningCubeBoundsStrategy.BoundsMode.BOUNDS_3D_VOLUME, SpinningCubeBoundsStrategy.BoundsMode.WRAP_SHARED_SCREEN]:
 		exit_distance = minf(exit_distance, maxf(0.0, _portrait_origin_z - (bounds_volume_center.z - bounds_volume_half_extents.z)))
 	world_position.z = _portrait_origin_z - exit_distance * depth_fraction
 	target.global_position = world_position
+	if time_since_reentry >= 0.0 and enable_wraparound and bounds_mode == SpinningCubeBoundsStrategy.BoundsMode.WRAP_SHARED_SCREEN:
+		world_position.z = _portrait_origin_z
+		target.global_position = world_position
+		_bounds_strategy.place_portrait_at_horizontal_entry(target, move_velocity)
+		world_position = target.global_position
+		world_position.z = _portrait_origin_z - exit_distance * depth_fraction
+		target.global_position = world_position
+		target.position.x += move_velocity.x * minf(delta, time_since_reentry)
+	else:
+		target.position.x += move_velocity.x * delta
 
 func handle_viewport_size_changed(target: Node3D, camera: Camera3D, viewport: Viewport) -> Camera3D:
 	if enable_wraparound:

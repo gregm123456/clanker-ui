@@ -96,6 +96,7 @@ func _run_tests() -> void:
 	renderer.queue_free()
 	cube.queue_free()
 	_test_reentry_direction()
+	_test_shared_reentry_visibility()
 	_test_vertical_walls()
 	if failures == 0:
 		print("Floating portrait tests passed")
@@ -170,6 +171,54 @@ func _test_reentry_direction() -> void:
 	fast.process_transform(cube, 32.0, null, null)
 	_check(is_equal_approx(fast._portrait_hold_seconds, stepped._portrait_hold_seconds) and fast._portrait_in_entry == stepped._portrait_in_entry and is_equal_approx(fast.move_velocity.x, stepped.move_velocity.x) and absf(cube.position.z - expected_depth) < 0.001, "Long frame skipped or repeated a randomized reset")
 	cube.queue_free()
+
+func _test_shared_reentry_visibility() -> void:
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(1257, 1024)
+	root.add_child(viewport)
+	var camera := Camera3D.new()
+	camera.position.z = 7.0
+	camera.fov = 65.0
+	viewport.add_child(camera)
+	var cube := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(4.25, 4.25, 0.05)
+	cube.mesh = box
+	viewport.add_child(cube)
+	var saw_left := false
+	var saw_right := false
+	for seed_value in [11, 12, 13, 14, 15, 16, 17, 18]:
+		seed(seed_value)
+		var movement = Movement.new()
+		movement.floating_portrait = true
+		movement.bounds_mode = Bounds.BoundsMode.WRAP_SHARED_SCREEN
+		movement.bounds_volume_half_extents = Vector3(20.0, 20.0, 60.0)
+		movement.move_velocity = Vector3(0.66, 0.2, 0.0)
+		_check(movement.configure_shared_screen(camera, viewport.size), "Could not configure shared re-entry view")
+		cube.position = Vector3(8.0 if seed_value % 2 == 0 else -8.0, 0.0, 0.0)
+		cube.rotation = Vector3.ZERO
+		movement.initialize_portrait(cube)
+		movement._portrait_hold_seconds = 5.0
+		movement.process_transform(cube, 6.49, camera, viewport)
+		_check(cube.position.z < -59.0 and movement.portrait_opacity < 0.05, "Portrait was not hidden before re-entry")
+		movement.process_transform(cube, 0.02, camera, viewport)
+		_check(movement.portrait_opacity < 0.01 and is_zero_approx(cube.position.z), "Portrait was not hidden when repositioned")
+		_check(cube.position.x * movement.move_velocity.x < 0.0, "Portrait did not enter opposite its direction")
+		saw_left = saw_left or movement.move_velocity.x < 0.0
+		saw_right = saw_right or movement.move_velocity.x > 0.0
+		movement._portrait_hold_seconds = 8.0
+		for _i in 180:
+			var projected_left := INF
+			var projected_right := -INF
+			for j in 8:
+				var projected := camera.unproject_position(cube.global_transform * cube.get_aabb().get_endpoint(j))
+				projected_left = minf(projected_left, projected.x)
+				projected_right = maxf(projected_right, projected.x)
+			var visible_width := maxf(0.0, minf(projected_right, viewport.size.x) - maxf(projected_left, 0.0))
+			_check(visible_width >= 0.95 * (projected_right - projected_left), "Portrait spent front time mostly off the shared wall")
+			movement.process_transform(cube, 0.05, camera, viewport)
+	_check(saw_left and saw_right, "Re-entry visibility test did not cover both directions")
+	viewport.queue_free()
 
 func _test_vertical_walls() -> void:
 	var viewport := SubViewport.new()

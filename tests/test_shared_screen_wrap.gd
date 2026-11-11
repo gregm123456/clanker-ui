@@ -106,6 +106,16 @@ func _run_tests() -> void:
 	_apply(peer_bounds, peer, peer_camera, Vector3.RIGHT)
 	_check(cube.position.is_equal_approx(peer.position), "Peer viewport affected shared wrap")
 
+	for velocity in [Vector3.LEFT, Vector3.RIGHT]:
+		cube.position = Vector3(30.0, 0.5, 0.0)
+		peer.position = cube.position
+		bounds.place_portrait_at_horizontal_entry(cube, velocity)
+		peer_bounds.place_portrait_at_horizontal_entry(peer, velocity)
+		_check(cube.position.is_equal_approx(peer.position), "Peer viewport affected portrait re-entry")
+		var projected := _projected_range(camera, cube, true)
+		_check(projected.x >= -0.02 and projected.y <= virtual_size.x + 0.02, "Rotated portrait re-entered outside the wall")
+		_check(cube.position.x * velocity.x < 0.0 and is_equal_approx(cube.position.y, 0.5), "Portrait re-entry changed the wrong axis or side")
+
 	cube.position = Vector3(9.0, 0.0, 0.0)
 	bounds.apply_bounds(cube, camera, viewport, 0.3, Bounds.BoundsMode.BOUNDS_3D_VOLUME,
 		Bounds.BoundsBehavior.WRAP, Vector3.ZERO, Vector3(8.0, 4.5, 12.0), Vector3.RIGHT)

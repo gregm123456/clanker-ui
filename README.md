@@ -165,8 +165,9 @@ the whole portrait bounces off the vertical edges of the shared view while its
 horizontal wrapping remains unchanged. It retreats up to 60 world units (limited
 by configured 3D volume bounds; shared-screen bounds expand to accommodate it),
 fades out near the end, and reappears near the starting
-depth with a new random hold and horizontal direction at the same speed. Opacity is
-synchronized with remote objects. Disable `floating_portrait`
+depth with a new random hold and horizontal direction at the same speed. On a
+shared wall, it reappears just inside the edge opposite that direction, so it
+drifts across the view. Opacity is synchronized with remote objects. Disable `floating_portrait`
 to retain the original tumbling motion.
 
 The object starts with the Position and Rotation values saved in the scene, then movement

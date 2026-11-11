@@ -166,6 +166,37 @@ func _apply_volume_bounds_3d(
 	target.global_position = next_global_position
 	return camera
 
+func place_portrait_at_horizontal_entry(target: Node3D, velocity: Vector3) -> void:
+	if not target is MeshInstance3D or _horizontal_tangent <= 0.0:
+		push_error("[wrap] Portrait entry requires a configured shared view and a mesh")
+		return
+	var inverse := _reference_transform.affine_inverse()
+	var view_velocity := inverse.basis * velocity
+	if is_zero_approx(view_velocity.x):
+		return
+	var center := inverse * target.global_position
+	var distance := -center.z
+	if distance <= 0.0:
+		push_error("[wrap] Portrait entry must be in front of the shared camera")
+		return
+	var basis := inverse.basis * target.global_basis
+	var mesh := target as MeshInstance3D
+	var aabb := mesh.get_aabb()
+	var min_left := INF
+	var max_right := -INF
+	for i in 8:
+		var offset := basis * aabb.get_endpoint(i)
+		min_left = minf(min_left, offset.x - _horizontal_tangent * offset.z)
+		max_right = maxf(max_right, offset.x + _horizontal_tangent * offset.z)
+	var left := -_horizontal_tangent * distance - min_left
+	var right := _horizontal_tangent * distance - max_right
+	if left > right:
+		push_warning("[wrap] Portrait is wider than the shared view; centering its entry")
+		center.x = (left + right) * 0.5
+	else:
+		center.x = lerpf(left, right, 0.05 if view_velocity.x > 0.0 else 0.95)
+	target.global_position = _reference_transform * center
+
 func bounce_vertical(target: Node3D, camera: Camera3D, viewport: Viewport, bounds_mode: int, velocity: Vector3) -> Vector3:
 	if camera == null and viewport != null:
 		camera = viewport.get_camera_3d()
