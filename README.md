@@ -139,7 +139,7 @@ Select `SpinningCube` and set these exported properties:
 
 | Property | Type and units | Meaning |
 | --- | --- | --- |
-| `floating_portrait` | Boolean | Uses a gentle upright wobble, a 6-second near-view hold, a 1.5-second retreat and a 1-second fade-in at the front. X/Y drift remains active, with bounces at the top and bottom of the view. Enabled in the default scene. |
+| `floating_portrait` | Boolean | Uses a gentle upright wobble, a random 5–8-second near-view hold, a 1.5-second retreat and a 1-second fade-in at the front. X/Y drift remains active, with bounces at the top and bottom of the view. Enabled in the default scene. |
 | `tumble_speed` | `Vector3`, radians/second | Continuous rotation speed around X, Y, and Z. For example `(0, 1.0, 0)` rotates around Y only. A negative value reverses that axis. |
 | `move_velocity` | `Vector3`, world units/second | Initial movement velocity on X, Y, and Z. For example `(0.5, 1.0, 0)` moves right and up without moving toward or away from the camera. |
 | `move_acceleration` | `Vector3`, world units/second squared | Added to velocity every update. Use `(0, 0, 0)` for constant velocity. |
@@ -165,7 +165,8 @@ the whole portrait bounces off the vertical edges of the shared view while its
 horizontal wrapping remains unchanged. It retreats up to 60 world units (limited
 by configured 3D volume bounds; shared-screen bounds expand to accommodate it),
 fades out near the end, and reappears near the starting
-depth. Opacity is synchronized with remote objects. Disable `floating_portrait`
+depth with a new random hold and horizontal direction at the same speed. Opacity is
+synchronized with remote objects. Disable `floating_portrait`
 to retain the original tumbling motion.
 
 The object starts with the Position and Rotation values saved in the scene, then movement

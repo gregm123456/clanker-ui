@@ -17,16 +17,24 @@ var portrait_opacity: float = 1.0
 
 var _bounds_strategy := SpinningCubeBoundsStrategyScript.new()
 var _portrait_elapsed := 0.0
+var _portrait_stage_elapsed := 0.0
+var _portrait_in_entry := false
+var _portrait_hold_seconds := 5.0
 var _portrait_origin_z := 0.0
 var _portrait_base_rotation := Vector3.ZERO
 var _portrait_phase := 0.0
 
-const PORTRAIT_HOLD_SECONDS := 6.0
+const PORTRAIT_MIN_HOLD_SECONDS := 5.0
+const PORTRAIT_MAX_HOLD_SECONDS := 8.0
 const PORTRAIT_TRAVEL_SECONDS := 1.5
 const PORTRAIT_ENTRY_SECONDS := 1.0
 const PORTRAIT_EXIT_DISTANCE := 60.0
 
 func initialize_portrait(target: Node3D) -> void:
+	_portrait_elapsed = 0.0
+	_portrait_stage_elapsed = 0.0
+	_portrait_in_entry = false
+	_portrait_hold_seconds = randf_range(PORTRAIT_MIN_HOLD_SECONDS, PORTRAIT_MAX_HOLD_SECONDS)
 	_portrait_origin_z = target.global_position.z
 	_portrait_base_rotation = target.rotation
 	_portrait_phase = randf_range(0.0, TAU)
@@ -82,9 +90,19 @@ func process_transform(target: Node3D, delta: float, camera: Camera3D, viewport:
 	return camera
 
 func _process_portrait(target: Node3D, delta: float) -> void:
-	var cycle_duration := PORTRAIT_HOLD_SECONDS + PORTRAIT_TRAVEL_SECONDS + PORTRAIT_ENTRY_SECONDS
 	_portrait_elapsed += delta
-	var cycle_time := fposmod(_portrait_elapsed, cycle_duration)
+	_portrait_stage_elapsed += delta
+	while true:
+		var stage_duration := PORTRAIT_ENTRY_SECONDS if _portrait_in_entry else _portrait_hold_seconds + PORTRAIT_TRAVEL_SECONDS
+		if _portrait_stage_elapsed < stage_duration:
+			break
+		_portrait_stage_elapsed -= stage_duration
+		if _portrait_in_entry:
+			_portrait_in_entry = false
+		else:
+			_portrait_in_entry = true
+			move_velocity.x = absf(move_velocity.x) * (1.0 if randi_range(0, 1) == 1 else -1.0)
+			_portrait_hold_seconds = randf_range(PORTRAIT_MIN_HOLD_SECONDS, PORTRAIT_MAX_HOLD_SECONDS)
 	var wobble_time := _portrait_elapsed + _portrait_phase
 	target.rotation = _portrait_base_rotation + Vector3(
 		deg_to_rad(8.0) * sin(wobble_time * TAU / 8.0),
@@ -93,14 +111,12 @@ func _process_portrait(target: Node3D, delta: float) -> void:
 	)
 	var depth_fraction := 0.0
 	portrait_opacity = 1.0
-	if cycle_time >= PORTRAIT_HOLD_SECONDS:
-		if cycle_time < PORTRAIT_HOLD_SECONDS + PORTRAIT_TRAVEL_SECONDS:
-			var progress := (cycle_time - PORTRAIT_HOLD_SECONDS) / PORTRAIT_TRAVEL_SECONDS
-			depth_fraction = progress * progress
-			portrait_opacity = 1.0 - smoothstep(0.94, 1.0, progress)
-		else:
-			var progress := (cycle_time - PORTRAIT_HOLD_SECONDS - PORTRAIT_TRAVEL_SECONDS) / PORTRAIT_ENTRY_SECONDS
-			portrait_opacity = smoothstep(0.0, 1.0, progress)
+	if _portrait_in_entry:
+		portrait_opacity = smoothstep(0.0, 1.0, _portrait_stage_elapsed / PORTRAIT_ENTRY_SECONDS)
+	elif _portrait_stage_elapsed >= _portrait_hold_seconds:
+		var progress := (_portrait_stage_elapsed - _portrait_hold_seconds) / PORTRAIT_TRAVEL_SECONDS
+		depth_fraction = progress * progress
+		portrait_opacity = 1.0 - smoothstep(0.94, 1.0, progress)
 	target.position += Vector3(move_velocity.x, move_velocity.y, 0.0) * delta
 	var world_position := target.global_position
 	var exit_distance := PORTRAIT_EXIT_DISTANCE

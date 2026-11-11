@@ -28,25 +28,27 @@ func _run_tests() -> void:
 	movement.enable_wraparound = false
 	movement.move_velocity = Vector3(0.5, 0.2, -1.0)
 	movement.initialize_portrait(cube)
-	for i in 850:
+	movement._portrait_hold_seconds = 7.8
+	for i in 1030:
+		var previous_x := cube.position.x
 		movement.process_transform(cube, 0.01, null, null)
 		var t := float(i + 1) * 0.01
 		_check(absf(cube.rotation.x) <= deg_to_rad(8.01), "Pitch exceeded wobble limit")
 		_check(absf(cube.rotation.y) <= deg_to_rad(20.01), "Yaw exceeded wobble limit")
 		_check(absf(cube.rotation.z) <= deg_to_rad(5.01), "Roll exceeded wobble limit")
-		if t < 6.0:
+		if t < 7.8:
 			_check(absf(cube.position.z) < 0.001, "Portrait left the near view too early")
 		_check(cube.position.z >= -60.001 and cube.position.z <= 0.001, "Depth exceeded cycle range")
-		if absf(t - 7.41) < 0.001:
+		_check(absf(cube.position.x - previous_x - movement.move_velocity.x * 0.01) < 0.0001, "Horizontal drift did not follow its velocity")
+		if absf(t - 9.21) < 0.001:
 			_check(7.0 - cube.position.z >= 3.0 * (7.0 + 12.8) and movement.portrait_opacity > 0.99, "Portrait faded before reaching three times its former visible distance")
-		if absf(t - 7.49) < 0.001:
+		if absf(t - 9.29) < 0.001:
 			_check(cube.position.z < -59.0 and movement.portrait_opacity < 0.05, "Exit was not distant and invisible")
-		if absf(t - 7.51) < 0.001:
+		if absf(t - 9.31) < 0.001:
 			_check(absf(cube.position.z) < 0.001 and movement.portrait_opacity < 0.01, "Portrait did not re-enter invisibly at the front")
-		if absf(t - 8.0) < 0.001:
+		if absf(t - 9.8) < 0.001:
 			_check(absf(cube.position.z) < 0.001 and movement.portrait_opacity > 0.4, "Portrait did not fade in at the front")
 	_check(absf(cube.position.z) < 0.001, "Portrait did not stay at the front after re-entry")
-	_check(absf(cube.position.x - 4.25) < 0.001, "Horizontal drift changed during the cycle")
 	var previous_rotation := cube.rotation
 	movement.process_transform(cube, 0.01, null, null)
 	_check(cube.rotation.distance_to(previous_rotation) < 0.01, "Wobble jumped at the cycle boundary")
@@ -93,10 +95,81 @@ func _run_tests() -> void:
 	camera.queue_free()
 	renderer.queue_free()
 	cube.queue_free()
+	_test_reentry_direction()
 	_test_vertical_walls()
 	if failures == 0:
 		print("Floating portrait tests passed")
 	quit(1 if failures else 0)
+
+func _test_reentry_direction() -> void:
+	var cube := Node3D.new()
+	root.add_child(cube)
+	var movement = Movement.new()
+	movement.floating_portrait = true
+	movement.enable_wraparound = false
+	movement.move_velocity = Vector3(0.5, 0.2, 0.0)
+	seed(123456)
+	movement.initialize_portrait(cube)
+	var saw_left := false
+	var saw_right := false
+	var shortest_hold := 8.0
+	var longest_hold := 5.0
+	for _i in 24:
+		var hold: float = movement._portrait_hold_seconds
+		_check(hold >= 5.0 and hold <= 8.0, "Front hold was outside the requested range")
+		shortest_hold = minf(shortest_hold, hold)
+		longest_hold = maxf(longest_hold, hold)
+		movement.process_transform(cube, hold - movement._portrait_stage_elapsed - 0.01, null, null)
+		_check(absf(cube.position.z) < 0.001, "Portrait retreated before its chosen hold ended")
+		movement.process_transform(cube, 0.02, null, null)
+		_check(cube.position.z < 0.0, "Portrait did not retreat after its chosen hold")
+		var previous_velocity: Vector3 = movement.move_velocity
+		movement.process_transform(cube, 1.48, null, null)
+		_check(movement.move_velocity == previous_velocity, "Horizontal direction changed before re-entry")
+		movement.process_transform(cube, 0.02, null, null)
+		var velocity: Vector3 = movement.move_velocity
+		var next_hold: float = movement._portrait_hold_seconds
+		saw_left = saw_left or velocity.x < 0.0
+		saw_right = saw_right or velocity.x > 0.0
+		_check(is_equal_approx(absf(velocity.x), 0.5) and is_equal_approx(velocity.y, 0.2), "Re-entry changed drift speed or vertical velocity")
+		movement.process_transform(cube, 0.02, null, null)
+		_check(movement.move_velocity == velocity, "Horizontal direction changed again during fade-in")
+		_check(is_equal_approx(movement._portrait_hold_seconds, next_hold), "Hold changed again during fade-in")
+		movement.process_transform(cube, 1.0, null, null)
+	_check(saw_left and saw_right, "Re-entry did not choose both horizontal directions")
+	_check(longest_hold - shortest_hold > 1.5, "Front holds did not vary across cycles")
+	var skipped = Movement.new()
+	skipped.floating_portrait = true
+	skipped.enable_wraparound = false
+	skipped.move_velocity = Vector3(0.5, 0.2, 0.0)
+	skipped.initialize_portrait(cube)
+	seed(123456)
+	var expected_direction := 1.0 if randi_range(0, 1) == 1 else -1.0
+	seed(123456)
+	skipped.process_transform(cube, 10.4, null, null)
+	_check(is_equal_approx(skipped.move_velocity.x, 0.5 * expected_direction), "Skipped re-entry did not choose a direction")
+	var stepped = Movement.new()
+	stepped.floating_portrait = true
+	stepped.enable_wraparound = false
+	stepped.move_velocity = Vector3(0.5, 0.2, 0.0)
+	cube.position = Vector3.ZERO
+	cube.rotation = Vector3.ZERO
+	seed(789)
+	stepped.initialize_portrait(cube)
+	for _i in 320:
+		stepped.process_transform(cube, 0.1, null, null)
+	var expected_depth := cube.position.z
+	var fast = Movement.new()
+	fast.floating_portrait = true
+	fast.enable_wraparound = false
+	fast.move_velocity = Vector3(0.5, 0.2, 0.0)
+	cube.position = Vector3.ZERO
+	cube.rotation = Vector3.ZERO
+	seed(789)
+	fast.initialize_portrait(cube)
+	fast.process_transform(cube, 32.0, null, null)
+	_check(is_equal_approx(fast._portrait_hold_seconds, stepped._portrait_hold_seconds) and fast._portrait_in_entry == stepped._portrait_in_entry and is_equal_approx(fast.move_velocity.x, stepped.move_velocity.x) and absf(cube.position.z - expected_depth) < 0.001, "Long frame skipped or repeated a randomized reset")
+	cube.queue_free()
 
 func _test_vertical_walls() -> void:
 	var viewport := SubViewport.new()
@@ -135,7 +208,7 @@ func _test_vertical_walls() -> void:
 	var bounced_top := false
 	var bounced_bottom := false
 	var deepest := 0.0
-	for _i in 850:
+	for _i in 1030:
 		var before_velocity: float = movement.move_velocity.y
 		movement.process_transform(cube, 0.01, camera, viewport)
 		deepest = minf(deepest, cube.position.z)
