@@ -1,5 +1,7 @@
 extends MeshInstance3D
 
+signal face_crops_received(faces, capture_order)
+
 const SpinningCubeInputControllerScript = preload("res://scripts/spinning_cube_input_controller.gd")
 const SpinningCubeMovementControllerScript = preload("res://scripts/spinning_cube_movement_controller.gd")
 const WebcamCameraSourceAdapterScript = preload("res://scripts/webcam_camera_source_adapter.gd")
@@ -12,6 +14,7 @@ const RemoteObjectRendererScript = preload("res://scripts/remote_object_renderer
 const WebcamSnapshotServerScript = preload("res://scripts/webcam_snapshot_server.gd")
 const WebcamSnapshotClientScript = preload("res://scripts/webcam_snapshot_client.gd")
 const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
+const FaceAttributeClientScript = preload("res://scripts/face_attribute_client.gd")
 
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -105,6 +108,10 @@ var _mesh_network_bridge
 var _remote_object_renderer
 var _webcam_snapshot_server
 var _webcam_snapshot_client
+var _face_snapshot_client
+var _face_client
+var _face_capture_order: int = 0
+var _pending_face_snapshots: Dictionary = {}
 var _webcam_started: bool = false
 
 func _ready() -> void:
@@ -112,6 +119,11 @@ func _ready() -> void:
 	camera = get_viewport().get_camera_3d()
 	_apply_runtime_configuration()
 	_configure_components()
+	_face_client = FaceAttributeClientScript.new()
+	_face_client.service_url = String(installation_config.get_face_settings()["service_url"])
+	add_child(_face_client)
+	_face_client.faces_received.connect(_on_face_crops_received)
+	_movement_controller.portrait_reentered.connect(_on_local_portrait_reentered)
 	if floating_portrait:
 		_movement_controller.initialize_portrait(self)
 	_movement_controller.randomize_speed_and_velocity()
@@ -165,6 +177,8 @@ func _exit_tree() -> void:
 		_mesh_network_bridge.shutdown()
 	if _webcam_snapshot_client != null:
 		_webcam_snapshot_client.close()
+	if _face_snapshot_client != null:
+		_face_snapshot_client.close()
 	if _webcam_snapshot_server != null:
 		_webcam_snapshot_server.close()
 	if _remote_object_renderer != null:
@@ -179,7 +193,7 @@ func _process(delta: float) -> void:
 		camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
 	if _mat != null and floating_portrait:
 		_mat.set_shader_parameter("portrait_opacity", _movement_controller.portrait_opacity)
-	_mesh_sync_controller.process_transform(self, _movement_controller.portrait_opacity)
+	_mesh_sync_controller.process_transform(self, _movement_controller.portrait_opacity, _movement_controller.portrait_cycle_sequence)
 	if _remote_object_renderer != null:
 		_remote_object_renderer.process(delta)
 
@@ -361,6 +375,7 @@ func _configure_mesh_sync() -> void:
 			shared_object_id,
 			camera
 		)
+		_remote_object_renderer.portrait_cycle_observed.connect(_on_remote_portrait_cycle)
 		var snapshot_address_book = PeerAddressBookScript.new()
 		snapshot_address_book.configure(
 			installation_config.get_peers(),
@@ -378,6 +393,17 @@ func _configure_mesh_sync() -> void:
 			_remote_object_renderer.set_snapshot_request_callback(_on_snapshot_requested)
 			_webcam_snapshot_client.snapshot_received.connect(_on_snapshot_received)
 			_webcam_snapshot_client.snapshot_failed.connect(_on_snapshot_failed)
+
+		_face_snapshot_client = WebcamSnapshotClientScript.new()
+		add_child(_face_snapshot_client)
+		var face_snapshot_error: Error = _face_snapshot_client.configure(snapshot_address_book, snapshot_port)
+		if face_snapshot_error != OK:
+			push_warning("[face] Remote snapshot client disabled (error=%s)" % face_snapshot_error)
+			_face_snapshot_client.queue_free()
+			_face_snapshot_client = null
+		else:
+			_face_snapshot_client.snapshot_jpeg_received.connect(_on_face_snapshot_received)
+			_face_snapshot_client.snapshot_failed.connect(_on_face_snapshot_failed)
 
 		_webcam_snapshot_server = WebcamSnapshotServerScript.new()
 		add_child(_webcam_snapshot_server)
@@ -404,3 +430,39 @@ func _on_snapshot_received(object_id: String, _owner_peer_id: String, texture: T
 
 func _on_snapshot_failed(object_id: String, owner_peer_id: String, reason: String) -> void:
 	print("[spinning_cube] Snapshot fetch failed for ", object_id, " from ", owner_peer_id, ": ", reason)
+
+func _on_local_portrait_reentered(_cycle_sequence: int) -> void:
+	_face_capture_order += 1
+	var image: Image = _camera_source.get_current_frame_image()
+	if image == null or image.is_empty():
+		push_warning("[face] No local camera frame available at portrait cycle")
+		return
+	_face_client.submit_image(image, _face_capture_order)
+
+func _on_remote_portrait_cycle(object_id: String, owner_peer_id: String) -> void:
+	_face_capture_order += 1
+	if _face_snapshot_client == null:
+		push_warning("[face] Remote snapshot client unavailable for " + object_id)
+		return
+	if _pending_face_snapshots.has(object_id):
+		push_warning("[face] Skipping cycle: remote snapshot already in progress for " + object_id)
+		return
+	_pending_face_snapshots[object_id] = _face_capture_order
+	var error: Error = _face_snapshot_client.request_snapshot(object_id, owner_peer_id)
+	if error != OK:
+		_pending_face_snapshots.erase(object_id)
+		push_warning("[face] Could not request remote snapshot for %s (error=%s)" % [object_id, error])
+
+func _on_face_snapshot_received(object_id: String, _owner_peer_id: String, jpeg: PackedByteArray) -> void:
+	if not _pending_face_snapshots.has(object_id):
+		return
+	var order := int(_pending_face_snapshots[object_id])
+	_pending_face_snapshots.erase(object_id)
+	_face_client.submit(jpeg, order)
+
+func _on_face_snapshot_failed(object_id: String, owner_peer_id: String, reason: String) -> void:
+	_pending_face_snapshots.erase(object_id)
+	push_warning("[face] Snapshot failed for %s from %s: %s" % [object_id, owner_peer_id, reason])
+
+func _on_face_crops_received(faces: Array, capture_order: int) -> void:
+	face_crops_received.emit(faces, capture_order)

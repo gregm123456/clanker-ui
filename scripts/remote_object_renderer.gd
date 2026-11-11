@@ -2,6 +2,7 @@ class_name RemoteObjectRenderer
 extends Node
 
 signal snapshot_requested(object_id, owner_peer_id)
+signal portrait_cycle_observed(object_id, owner_peer_id)
 
 const WallGeometryCalculatorScript = preload("res://scripts/wall_geometry_calculator.gd")
 const SUPPORTED_DESCRIPTOR_KINDS := ["mesh_instance"]
@@ -12,6 +13,8 @@ var _camera: Camera3D
 var _snapshot_callback: Callable = Callable()
 var _proxy_states: Dictionary = {}
 var _pending_transforms: Dictionary = {}
+var _cycle_states: Dictionary = {}
+var _warned_missing_cycles: Dictionary = {}
 
 func configure(mesh_sync_service, local_object_id: String, camera: Camera3D = null) -> void:
 	_mesh_sync_service = mesh_sync_service
@@ -64,6 +67,8 @@ func shutdown() -> void:
 			instance.queue_free()
 	_proxy_states.clear()
 	_pending_transforms.clear()
+	_cycle_states.clear()
+	_warned_missing_cycles.clear()
 
 func _connect_service_signals() -> void:
 	if _mesh_sync_service == null:
@@ -132,6 +137,7 @@ func _apply_transform(object_id: String, transform_state: Dictionary) -> void:
 	if instance == null:
 		return
 	state["owner_peer_id"] = String(transform_state.get("owner_peer_id", state.get("owner_peer_id", "")))
+	_observe_portrait_cycle(object_id, String(state["owner_peer_id"]), transform_state)
 	var position: Vector3 = transform_state.get("position", instance.global_position)
 	var rotation: Quaternion = transform_state.get("rotation", Quaternion.IDENTITY)
 	instance.global_transform = Transform3D(Basis(rotation), position)
@@ -148,6 +154,8 @@ func _on_shared_object_despawned(object_id: String) -> void:
 	if instance != null:
 		instance.queue_free()
 	_proxy_states.erase(object_id)
+	_cycle_states.erase(object_id)
+	_warned_missing_cycles.erase(object_id)
 
 func _on_peer_connection_changed(peer_id: String, is_online: bool) -> void:
 	if is_online:
@@ -159,7 +167,37 @@ func _on_peer_connection_changed(peer_id: String, is_online: bool) -> void:
 			var instance: MeshInstance3D = state.get("instance")
 			if instance != null:
 				instance.queue_free()
-		_proxy_states.erase(object_id)
+			_proxy_states.erase(object_id)
+			_cycle_states.erase(object_id)
+			_warned_missing_cycles.erase(object_id)
+
+func _observe_portrait_cycle(object_id: String, owner_peer_id: String, transform_state: Dictionary) -> void:
+	if not transform_state.has("portrait_cycle"):
+		if not _warned_missing_cycles.has(object_id):
+			_warned_missing_cycles[object_id] = true
+			print("[face] Peer ", owner_peer_id, " does not publish portrait cycle markers")
+		return
+	var sequence := int(transform_state["portrait_cycle"])
+	var incarnation := String(transform_state["portrait_incarnation"])
+	var previous: Dictionary = _cycle_states.get(object_id, {})
+	if previous.is_empty() or String(previous.get("owner", "")) != owner_peer_id:
+		_cycle_states[object_id] = {"owner": owner_peer_id, "incarnation": incarnation, "sequence": sequence, "retired": []}
+		return
+	var retired: Array = previous["retired"]
+	if incarnation != String(previous["incarnation"]):
+		if retired.has(incarnation):
+			return
+		retired.append(previous["incarnation"])
+		previous["incarnation"] = incarnation
+		previous["sequence"] = sequence
+		return
+	var old_sequence := int(previous["sequence"])
+	if sequence <= old_sequence:
+		return
+	previous["sequence"] = sequence
+	if sequence > old_sequence + 1:
+		print("[face] Missed ", sequence - old_sequence - 1, " remote cycle(s) for ", object_id)
+	portrait_cycle_observed.emit(object_id, owner_peer_id)
 
 func _create_proxy_for_descriptor(object_id: String, descriptor: Dictionary) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()

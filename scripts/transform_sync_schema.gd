@@ -27,7 +27,7 @@ func deserialize_transform(payload: Dictionary) -> Dictionary:
 	if typeof(opacity) not in [TYPE_INT, TYPE_FLOAT] or not is_finite(float(opacity)) or float(opacity) < 0.0 or float(opacity) > 1.0:
 		push_warning("[mesh_sync] Invalid object opacity")
 		return {}
-	return {
+	var result := {
 		"version": SCHEMA_VERSION,
 		"object_id": String(payload.get("object_id", "")),
 		"owner_peer_id": String(payload.get("owner_peer_id", "")),
@@ -45,3 +45,14 @@ func deserialize_transform(payload: Dictionary) -> Dictionary:
 			float(rotation_data[3])
 		)
 	}
+	if payload.has("portrait_cycle") or payload.has("portrait_incarnation"):
+		var sequence: Variant = payload.get("portrait_cycle")
+		var incarnation: Variant = payload.get("portrait_incarnation")
+		if typeof(sequence) not in [TYPE_INT, TYPE_FLOAT] or not is_finite(float(sequence)) \
+				or float(sequence) < 0.0 or float(sequence) != floor(float(sequence)) \
+				or typeof(incarnation) != TYPE_STRING or String(incarnation).is_empty():
+			push_warning("[mesh_sync] Invalid portrait cycle marker")
+			return {}
+		result["portrait_cycle"] = int(sequence)
+		result["portrait_incarnation"] = String(incarnation)
+	return result

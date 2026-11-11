@@ -83,6 +83,12 @@ func get_camera_settings() -> Dictionary:
 		"flip_horizontal": _get_bool("camera", "flip_webcam_horizontal", true),
 	}
 
+func get_face_settings() -> Dictionary:
+	return {
+		"service_url": _get_string("faces", "service_url", "http://pi5ai2sd:5002/v1/attributes"),
+		"max_portraits": int(_get_number("faces", "max_portraits", 10)),
+	}
+
 func _load_or_create() -> void:
 	var resolved_path := ProjectSettings.globalize_path(CONFIG_PATH)
 	var file_exists := FileAccess.file_exists(resolved_path)
@@ -163,6 +169,10 @@ csi_camera_name = ""
 csi_rotate_180 = false
 webcam_fit_mode = 0
 flip_webcam_horizontal = true
+
+[faces]
+service_url = "http://pi5ai2sd:5002/v1/attributes"
+max_portraits = 10
 """.strip_edges()
 
 func _get_string(section: String, key: String, default_value: String) -> String:

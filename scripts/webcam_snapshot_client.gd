@@ -2,6 +2,7 @@ class_name WebcamSnapshotClient
 extends Node
 
 signal snapshot_received(object_id, owner_peer_id, texture)
+signal snapshot_jpeg_received(object_id, owner_peer_id, jpeg)
 signal snapshot_failed(object_id, owner_peer_id, reason)
 
 const MAX_JPEG_BYTES: int = 20 * 1024 * 1024
@@ -129,6 +130,7 @@ func _process_body(object_id: String, request: Dictionary) -> void:
 		stream.disconnect_from_host()
 	_requests.erase(object_id)
 	snapshot_received.emit(object_id, String(request.get("owner_peer_id", "")), texture)
+	snapshot_jpeg_received.emit(object_id, String(request.get("owner_peer_id", "")), body.slice(0, int(request["expected_bytes"])))
 
 func _fail_request(object_id: String, request: Dictionary, reason: String) -> void:
 	var stream: StreamPeerTCP = request.get("stream")

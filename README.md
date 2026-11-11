@@ -246,6 +246,10 @@ csi_camera_name =
 csi_rotate_180 = false
 webcam_fit_mode = 0
 flip_webcam_horizontal = true
+
+[faces]
+service_url = "http://pi5ai2sd:5002/v1/attributes"
+max_portraits = 10
 ```
 
 At startup the scene applies these values as overrides to the exported defaults for:
@@ -263,6 +267,9 @@ At startup the scene applies these values as overrides to the exported defaults 
 - `flip_webcam_horizontal`
 
 The exported values remain the editor-time fallback when a config value is absent or blank.
+The `[faces]` values select the Hailo face-attributes endpoint and the maximum number
+of face portraits retained per app instance. The defaults also apply to existing configs
+without that section.
 
 ### One Pi driving two portrait displays
 
@@ -399,6 +406,29 @@ in flight. A failed fetch leaves the proxy's existing neutral material or previo
 The renderer only triggers on an outside-to-inside visibility transition, so a visible proxy does
 not continuously fetch images.
 
+### Face portraits
+
+Each floating portrait's depth-cycle re-entry triggers face extraction from its camera:
+the local camera supplies its current frame, while remote cameras supply a fresh snapshot
+from their owning peers. Frames are sent asynchronously to the configured Hailo
+`/v1/attributes` service. Every returned face crop is displayed at its original pixel
+size in a gently moving foreground overlay spanning the display. The latest 10 crops
+across cameras are retained by default; repeated appearances of the same person are
+kept. Nothing is written to disk by the app.
+
+Each portrait has a label: `M` for a male model score strictly above 0.70, `F` for
+a female model score strictly above 0.70, and `?` otherwise. These are model
+estimates, not verified attributes. The service determines which faces it detects
+and limits detections per image (currently 10 by default).
+
+Extraction is enabled on each app instance. Both peers must run this version to
+publish and consume portrait-cycle markers; older peers continue to display snapshots
+but cannot trigger remote extraction. Face extraction requires `floating_portrait`
+and, for remote cameras, a working mesh connection and snapshot server. Missing frames,
+unreachable services and saturated requests are logged; existing portraits remain
+visible. Images are sent over HTTP to the configured host, so use a trusted network
+and an appropriate service endpoint.
+
 ## Runtime architecture
 
 - `spinning_cube.gd` now acts as a thin scene coordinator.
@@ -423,7 +453,8 @@ The Phase 3 UDP envelope is:
 {"version":1,"type":"transform|calibration|spawn|despawn|heartbeat","sender_peer_id":"peer-id","payload":{}}
 ```
 
-Transform payloads use `TransformSyncSchema`. Calibration payloads use the JSON-safe
+Transform payloads use `TransformSyncSchema`, including optional portrait-cycle
+sequence and incarnation fields for updated floating-portrait peers. Calibration payloads use the JSON-safe
 dictionary form of `MeshCalibrationModel`; spawn and despawn payloads include `object_id`.
 Unknown message types, unsupported versions, malformed JSON, and invalid payload shapes are
 dropped without terminating the receiver. The network bridge is generic and does not render

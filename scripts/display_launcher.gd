@@ -3,6 +3,7 @@ extends Node
 const InstallationConfigScript = preload("res://scripts/installation_config.gd")
 const CombinedDisplayGeometryScript = preload("res://scripts/combined_display_geometry.gd")
 const CalibrationOverlayScript = preload("res://scripts/display_calibration_overlay.gd")
+const FacePortraitOverlayScript = preload("res://scripts/face_portrait_overlay.gd")
 const MainScene = preload("res://main.tscn")
 
 var _combined := false
@@ -14,12 +15,20 @@ var _wall_layout: Dictionary
 var _layout_check_elapsed := 0.0
 var _restarting := false
 var _original_scale_mode: Window.ContentScaleMode
+var _face_overlay
 
 func _ready() -> void:
 	var config := InstallationConfigScript.new()
+	_face_overlay = FacePortraitOverlayScript.new()
+	var max_portraits := int(config.get_face_settings()["max_portraits"])
+	if max_portraits < 1:
+		push_warning("[face] Invalid portrait limit; using 10")
+		max_portraits = 10
+	_face_overlay.max_portraits = max_portraits
+	add_child(_face_overlay)
 	var display: Dictionary = config.get_display_settings()
 	if not bool(display["combined_wall"]) and not OS.get_cmdline_user_args().has("--combined-wall"):
-		add_child(MainScene.instantiate())
+		_add_main_scene(self)
 		return
 
 	var wall: Dictionary = config.get_wall_layout()
@@ -75,7 +84,7 @@ func _start_single_display(reason: String) -> void:
 	push_warning("[display] " + reason + "; falling back to one screen")
 	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	add_child(MainScene.instantiate())
+	_add_main_scene(self)
 
 func _start_combined_display(layout: Dictionary) -> void:
 	_combined = true
@@ -89,6 +98,7 @@ func _start_combined_display(layout: Dictionary) -> void:
 	var cube := scene.get_node("SpinningCube")
 	cube.start_fullscreen = false
 	cube.combined_wall = true
+	cube.face_crops_received.connect(_face_overlay.add_faces)
 	_scene_viewport.add_child(scene)
 
 	if OS.get_cmdline_user_args().has("--calibrate-display"):
@@ -108,6 +118,11 @@ func _start_combined_display(layout: Dictionary) -> void:
 		for child in get_children():
 			if child is TextureRect:
 				print("[display] panel rect=", child.get_global_rect(), " region=", child.texture.region)
+
+func _add_main_scene(parent: Node) -> void:
+	var scene := MainScene.instantiate()
+	scene.get_node("SpinningCube").face_crops_received.connect(_face_overlay.add_faces)
+	parent.add_child(scene)
 
 func _exit_tree() -> void:
 	if _combined:

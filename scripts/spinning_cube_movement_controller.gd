@@ -1,6 +1,8 @@
 class_name SpinningCubeMovementController
 extends RefCounted
 
+signal portrait_reentered(cycle_sequence)
+
 const SpinningCubeBoundsStrategyScript = preload("res://scripts/spinning_cube_bounds_strategy.gd")
 
 var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -14,6 +16,7 @@ var bounds_volume_center: Vector3 = Vector3.ZERO
 var bounds_volume_half_extents: Vector3 = Vector3(8.0, 4.5, 4.0)
 var floating_portrait: bool = false
 var portrait_opacity: float = 1.0
+var portrait_cycle_sequence: int = 0
 
 var _bounds_strategy := SpinningCubeBoundsStrategyScript.new()
 var _portrait_elapsed := 0.0
@@ -31,6 +34,7 @@ const PORTRAIT_ENTRY_SECONDS := 1.0
 const PORTRAIT_EXIT_DISTANCE := 60.0
 
 func initialize_portrait(target: Node3D) -> void:
+	portrait_cycle_sequence = 0
 	_portrait_elapsed = 0.0
 	_portrait_stage_elapsed = 0.0
 	_portrait_in_entry = false
@@ -93,6 +97,7 @@ func _process_portrait(target: Node3D, delta: float) -> void:
 	_portrait_elapsed += delta
 	_portrait_stage_elapsed += delta
 	var time_since_reentry := -1.0
+	var previous_cycle := portrait_cycle_sequence
 	while true:
 		var stage_duration := PORTRAIT_ENTRY_SECONDS if _portrait_in_entry else _portrait_hold_seconds + PORTRAIT_TRAVEL_SECONDS
 		if _portrait_stage_elapsed < stage_duration:
@@ -105,6 +110,11 @@ func _process_portrait(target: Node3D, delta: float) -> void:
 			time_since_reentry = _portrait_stage_elapsed
 			move_velocity.x = absf(move_velocity.x) * (1.0 if randi_range(0, 1) == 1 else -1.0)
 			_portrait_hold_seconds = randf_range(PORTRAIT_MIN_HOLD_SECONDS, PORTRAIT_MAX_HOLD_SECONDS)
+			portrait_cycle_sequence += 1
+	if portrait_cycle_sequence > previous_cycle:
+		if portrait_cycle_sequence > previous_cycle + 1:
+			print("[face] Missed ", portrait_cycle_sequence - previous_cycle - 1, " local cycle(s)")
+		portrait_reentered.emit(portrait_cycle_sequence)
 	var wobble_time := _portrait_elapsed + _portrait_phase
 	target.rotation = _portrait_base_rotation + Vector3(
 		deg_to_rad(8.0) * sin(wobble_time * TAU / 8.0),

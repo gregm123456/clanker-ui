@@ -19,6 +19,7 @@ var _viewport: Viewport
 var _mesh_sync_service = MeshSyncServiceScript.new()
 var _transform_schema = TransformSyncSchemaScript.new()
 var _network_bridge
+var _portrait_incarnation: String = ""
 
 func configure(target: MeshInstance3D, camera: Camera3D, viewport: Viewport, enabled_value: bool, node_id: String, peer_id: String, object_id: String, calibration: MeshCalibrationModel) -> MeshCalibrationModel:
 	_target = target
@@ -30,6 +31,9 @@ func configure(target: MeshInstance3D, camera: Camera3D, viewport: Viewport, ena
 	shared_object_id = object_id
 	calibration_model = calibration
 	_owns_default_calibration_model = false
+	_portrait_incarnation = Crypto.new().generate_random_bytes(16).hex_encode()
+	if floating_portrait and _portrait_incarnation.is_empty():
+		push_error("[face] Could not create a portrait cycle incarnation")
 
 	if not enabled:
 		return calibration_model
@@ -64,13 +68,16 @@ func handle_viewport_size_changed(viewport: Viewport) -> void:
 	_viewport = viewport
 	_publish_calibration()
 
-func process_transform(target: MeshInstance3D, opacity: float = 1.0) -> void:
+func process_transform(target: MeshInstance3D, opacity: float = 1.0, cycle_sequence: int = 0) -> void:
 	_target = target
 	if not enabled or _target == null:
 		return
 
 	var payload := _transform_schema.serialize_transform(shared_object_id, mesh_peer_id, _target.global_transform)
 	payload["opacity"] = opacity
+	if floating_portrait and not _portrait_incarnation.is_empty():
+		payload["portrait_cycle"] = cycle_sequence
+		payload["portrait_incarnation"] = _portrait_incarnation
 	_mesh_sync_service.publish_object_transform(shared_object_id, payload)
 	if _network_bridge != null:
 		_network_bridge.send_object_transform(payload)
