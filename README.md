@@ -148,13 +148,26 @@ operation restarts display setup. F11/Alt-Enter restore the spanning rectangle
 in combined mode; Escape and M retain their normal functions.
 
 On `pi5ai2sd`, native Wayland currently reports unusable monitor positions to
-Godot 4.7.2. XWayland reported and accepted the spanning rectangle in testing;
-to select it from the graphical session, launch the export with
-`--display-driver x11`. No desktop-session switch is required for this test.
-The option `-- --combined-wall` temporarily enables combined mode without
-editing the config. The display backend and actual requested/placed window
-rectangles are logged at startup. Pixel alignment and performance should still
-be verified on the physical displays.
+Godot 4.7.2. To launch the installed build across both displays, log in as the
+desktop user while its graphical session is running, then run this command from
+the directory containing `clankerUI.sh` (including when connected over SSH):
+
+```sh
+XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 \
+  ./clankerUI.sh --display-driver x11 -- --combined-wall
+```
+
+This selects XWayland and supplies the graphical-session environment used in
+testing. `-- --combined-wall` enables combined mode for this run even if the
+config does not. The socket and display names above are specific to the tested
+session; use the actual desktop session's values if they differ.
+
+Check the startup log for `backend=X11`, the two 600×1024 screen rectangles,
+and matching requested and actual spanning windows. If the log says `X11
+Display is not available`, check the graphical session and its environment. If
+the app warns that the screens are not adjacent and equally sized or that the
+window placement failed, it falls back to one screen; check the desktop display
+layout before relaunching.
 
 For a static grid and diagonal seam check, add
 `-- --combined-wall --calibrate-display` to the launch command. The displayed
@@ -165,6 +178,31 @@ The headless peer retains its existing shared-object and one-shot snapshot
 protocol. A Pi without a monitor is not necessarily running Godot with
 `--headless`; verify its CSI capture and peer connection separately. Touchscreen
 input mapping is not configured by combined-wall mode.
+
+#### Automatic startup on the two Pis
+
+`pi5ai2sd` and `m5image` are configured to start the graphical Godot client
+after their `gregm` desktop automatically logs in. A desktop autostart entry
+starts the `clankerui` user service; systemd restarts it after an abnormal exit,
+but not a normal exit. `pi5ai2sd` starts in combined-wall mode. `m5image`
+starts a graphical window on its desktop, including its virtual desktop when
+no monitor is connected; it does not use Godot's `--headless` mode.
+
+One of the display Pi's panels is powered by `m5image`. Power on `m5image`
+before starting `pi5ai2sd`, and make sure both panels are powered and detected.
+If the display client starts before both outputs are ready, it can fall back to
+one screen and will not automatically switch back when the second appears.
+After both outputs are ready, restart the display client as `gregm`:
+
+```sh
+XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user restart clankerui.service
+```
+
+On either Pi, use the same environment prefix with `systemctl --user status
+clankerui.service` or `systemctl --user stop clankerui.service` to check or stop
+the app. The startup entry is `~/.config/autostart/clankerui.desktop`; the
+service is `~/.config/systemd/user/clankerui.service`. The desktop session must
+be running for automatic startup.
 
 #### Shared screen-edge wrapping
 
