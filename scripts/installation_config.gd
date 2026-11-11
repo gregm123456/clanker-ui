@@ -78,6 +78,7 @@ func get_camera_settings() -> Dictionary:
 		"csi_camera_height": int(_get_number("camera", "csi_camera_height", 540)),
 		"csi_camera_fps": int(_get_number("camera", "csi_camera_fps", 30)),
 		"csi_camera_name": _get_string("camera", "csi_camera_name", ""),
+		"csi_rotate_180": _get_bool("camera", "csi_rotate_180", false),
 		"fit_mode": int(_get_number("camera", "webcam_fit_mode", 0)),
 		"flip_horizontal": _get_bool("camera", "flip_webcam_horizontal", true),
 	}
@@ -159,6 +160,7 @@ csi_camera_width = 960
 csi_camera_height = 540
 csi_camera_fps = 30
 csi_camera_name = ""
+csi_rotate_180 = false
 webcam_fit_mode = 0
 flip_webcam_horizontal = true
 """.strip_edges()

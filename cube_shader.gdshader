@@ -12,6 +12,7 @@ uniform int webcam_mode = 0; // 0: None, 1: RGB, 2: YCbCr 4:2:0 Bi-Planar
 uniform int webcam_fit_mode = 0; // 0: Fit (letterbox full frame), 1: Cover (crop), 2: Stretch
 uniform float webcam_aspect = 1.777778; // 16:9 default
 uniform bool webcam_flip_h = true;
+uniform bool webcam_rotate_180 = false;
 uniform vec4 webcam_face_bg : source_color = vec4(0.06, 0.08, 0.12, 1.0);
 
 uniform vec4 cube_color : source_color = vec4(0.12, 0.15, 0.22, 1.0);
@@ -122,6 +123,9 @@ void fragment() {
 		bool flip_for_face = (face_id == 2 || face_id == 3 || face_id == 5);
 		if (webcam_flip_h && flip_for_face) {
 			cam_uv.x = 1.0 - cam_uv.x;
+		}
+		if (webcam_rotate_180) {
+			cam_uv = vec2(1.0) - cam_uv;
 		}
 
 		if (in_bounds && webcam_mode == 2) {

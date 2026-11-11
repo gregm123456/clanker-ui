@@ -9,6 +9,7 @@ var csi_camera_width: int = 960
 var csi_camera_height: int = 540
 var csi_camera_fps: int = 30
 var csi_camera_name: String = ""
+var csi_rotate_180: bool = false
 var webcam_fit_mode: int = 0
 var flip_webcam_horizontal: bool = true
 
@@ -63,7 +64,12 @@ func process(delta: float) -> void:
 
 func get_current_frame_image() -> Image:
 	if _csi_provider != null:
-		return _csi_provider.get_image()
+		var image := _csi_provider.get_image()
+		if image != null and csi_rotate_180:
+			image = image.duplicate()
+			image.flip_x()
+			image.flip_y()
+		return image
 	if current_feed != null and current_feed.is_active() and webcam_y_texture != null:
 		return webcam_y_texture.get_image()
 	return null
@@ -107,6 +113,7 @@ func _setup_csi_camera() -> bool:
 		_material.set_shader_parameter("webcam_texture", _csi_provider.get_texture())
 		_material.set_shader_parameter("webcam_cbcr_texture", null)
 		_material.set_shader_parameter("webcam_mode", 1)
+		_material.set_shader_parameter("webcam_rotate_180", csi_rotate_180)
 		if csi_camera_height > 0:
 			_material.set_shader_parameter("webcam_aspect", float(csi_camera_width) / float(csi_camera_height))
 	print("[webcam] using CSI camera provider at ", csi_camera_width, "x", csi_camera_height, " @ ", csi_camera_fps, " fps")
@@ -251,6 +258,7 @@ func _reset_material_webcam_state() -> void:
 	_material.set_shader_parameter("webcam_cbcr_texture", null)
 	_material.set_shader_parameter("webcam_mode", 0)
 	_material.set_shader_parameter("webcam_aspect", 1.777778)
+	_material.set_shader_parameter("webcam_rotate_180", false)
 
 func _schedule_feed_deactivation(feed: CameraFeed) -> void:
 	if feed == null:

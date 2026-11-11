@@ -238,6 +238,7 @@ csi_camera_width = 960
 csi_camera_height = 540
 csi_camera_fps = 30
 csi_camera_name =
+csi_rotate_180 = false
 webcam_fit_mode = 0
 flip_webcam_horizontal = true
 ```
@@ -250,6 +251,7 @@ At startup the scene applies these values as overrides to the exported defaults 
 - `prefer_csi_camera`
 - `csi_camera_width`
 - `csi_camera_height`
+- `csi_rotate_180` (rotates the native CSI feed and its shared snapshots, without affecting USB cameras)
 - `csi_camera_fps`
 - `csi_camera_name`
 - `webcam_fit_mode`

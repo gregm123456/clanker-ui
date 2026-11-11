@@ -67,6 +67,7 @@ const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 @export var csi_camera_height: int = 540
 @export var csi_camera_fps: int = 30
 @export var csi_camera_name: String = ""
+@export var csi_rotate_180: bool = false
 
 ## How the webcam frame fits onto the square cube face:
 ## 0 = Fit Letterbox (shows full camera frame without distortion/cropping)
@@ -273,6 +274,8 @@ func _apply_runtime_configuration() -> void:
 		csi_camera_fps = int(camera_settings.get("csi_camera_fps", csi_camera_fps))
 	if camera_settings.has("csi_camera_name"):
 		csi_camera_name = String(camera_settings.get("csi_camera_name", csi_camera_name))
+	if camera_settings.has("csi_rotate_180"):
+		csi_rotate_180 = bool(camera_settings["csi_rotate_180"])
 	if camera_settings.has("fit_mode"):
 		webcam_fit_mode = int(camera_settings.get("fit_mode", webcam_fit_mode))
 	if camera_settings.has("flip_horizontal"):
@@ -305,6 +308,7 @@ func _configure_components() -> void:
 	webcam_adapter.csi_camera_height = csi_camera_height
 	webcam_adapter.csi_camera_fps = csi_camera_fps
 	webcam_adapter.csi_camera_name = csi_camera_name
+	webcam_adapter.csi_rotate_180 = csi_rotate_180
 	webcam_adapter.webcam_fit_mode = webcam_fit_mode
 	webcam_adapter.flip_webcam_horizontal = flip_webcam_horizontal
 
