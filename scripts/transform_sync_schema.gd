@@ -23,11 +23,16 @@ func deserialize_transform(payload: Dictionary) -> Dictionary:
 	if position_data.size() != 3 or rotation_data.size() != 4:
 		return {}
 
+	var opacity: Variant = payload.get("opacity", 1.0)
+	if typeof(opacity) not in [TYPE_INT, TYPE_FLOAT] or not is_finite(float(opacity)) or float(opacity) < 0.0 or float(opacity) > 1.0:
+		push_warning("[mesh_sync] Invalid object opacity")
+		return {}
 	return {
 		"version": SCHEMA_VERSION,
 		"object_id": String(payload.get("object_id", "")),
 		"owner_peer_id": String(payload.get("owner_peer_id", "")),
 		"timestamp_usec": int(payload.get("timestamp_usec", 0)),
+		"opacity": float(opacity),
 		"position": Vector3(
 			float(position_data[0]),
 			float(position_data[1]),

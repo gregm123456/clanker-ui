@@ -18,6 +18,7 @@ enum BoundsBehavior {
 var _reference_transform := Transform3D.IDENTITY
 var _horizontal_tangent := 0.0
 var _vertical_tangent := 0.0
+var _warned_portrait_bounds := false
 
 func configure_shared_screen(camera: Camera3D, virtual_size: Vector2i) -> bool:
 	if camera == null or camera.projection != Camera3D.PROJECTION_PERSPECTIVE \
@@ -38,20 +39,21 @@ func apply_bounds(
 		bounds_behavior: int,
 		volume_center: Vector3,
 		volume_half_extents: Vector3,
-		velocity: Vector3 = Vector3.ZERO
+		velocity: Vector3 = Vector3.ZERO,
+		wrap_vertical: bool = true
 ) -> Camera3D:
 	if bounds_mode == BoundsMode.NONE:
 		return camera
 	if bounds_mode == BoundsMode.WRAP_2D_VIEWPORT:
-		return _apply_viewport_wrap_2d(target, camera, viewport, wrap_margin)
+		return _apply_viewport_wrap_2d(target, camera, viewport, wrap_margin, wrap_vertical)
 	if bounds_mode == BoundsMode.BOUNDS_3D_VOLUME:
-		return _apply_volume_bounds_3d(target, camera, bounds_behavior, volume_center, volume_half_extents)
+		return _apply_volume_bounds_3d(target, camera, bounds_behavior, volume_center, volume_half_extents, wrap_vertical)
 	if bounds_mode == BoundsMode.WRAP_SHARED_SCREEN:
-		return _apply_shared_screen_wrap(target, camera, wrap_margin, volume_center, volume_half_extents, velocity)
+		return _apply_shared_screen_wrap(target, camera, wrap_margin, volume_center, volume_half_extents, velocity, wrap_vertical)
 
 	return camera
 
-func _apply_viewport_wrap_2d(target: Node3D, camera: Camera3D, viewport: Viewport, wrap_margin: float) -> Camera3D:
+func _apply_viewport_wrap_2d(target: Node3D, camera: Camera3D, viewport: Viewport, wrap_margin: float, wrap_vertical: bool) -> Camera3D:
 	var resolved_camera := camera
 	if resolved_camera == null and viewport != null:
 		resolved_camera = viewport.get_camera_3d()
@@ -76,9 +78,9 @@ func _apply_viewport_wrap_2d(target: Node3D, camera: Camera3D, viewport: Viewpor
 		next_global_position.x = cam_pos.x + bound_x
 
 	var rel_y := next_global_position.y - cam_pos.y
-	if rel_y > bound_y:
+	if wrap_vertical and rel_y > bound_y:
 		next_global_position.y = cam_pos.y - bound_y
-	elif rel_y < -bound_y:
+	elif wrap_vertical and rel_y < -bound_y:
 		next_global_position.y = cam_pos.y + bound_y
 
 	target.global_position = next_global_position
@@ -90,7 +92,8 @@ func _apply_shared_screen_wrap(
 		wrap_margin: float,
 		volume_center: Vector3,
 		volume_half_extents: Vector3,
-		velocity: Vector3
+		velocity: Vector3,
+		wrap_vertical: bool
 ) -> Camera3D:
 	if not target is MeshInstance3D or _horizontal_tangent <= 0.0 or _vertical_tangent <= 0.0:
 		push_error("[wrap] Shared screen wrapping requires a configured reference view and a mesh")
@@ -129,9 +132,9 @@ func _apply_shared_screen_wrap(
 		center.x = left
 	elif center.x < left and view_velocity.x < 0.0:
 		center.x = right
-	if center.y > top and view_velocity.y > 0.0:
+	if wrap_vertical and center.y > top and view_velocity.y > 0.0:
 		center.y = bottom
-	elif center.y < bottom and view_velocity.y < 0.0:
+	elif wrap_vertical and center.y < bottom and view_velocity.y < 0.0:
 		center.y = top
 	target.global_position = _reference_transform * center
 	return camera
@@ -141,7 +144,8 @@ func _apply_volume_bounds_3d(
 		camera: Camera3D,
 		bounds_behavior: int,
 		volume_center: Vector3,
-		volume_half_extents: Vector3
+		volume_half_extents: Vector3,
+		wrap_vertical: bool
 ) -> Camera3D:
 	var next_global_position := target.global_position
 
@@ -150,15 +154,71 @@ func _apply_volume_bounds_3d(
 
 	if bounds_behavior == BoundsBehavior.CLAMP:
 		next_global_position.x = clampf(next_global_position.x, min_bounds.x, max_bounds.x)
-		next_global_position.y = clampf(next_global_position.y, min_bounds.y, max_bounds.y)
+		if wrap_vertical:
+			next_global_position.y = clampf(next_global_position.y, min_bounds.y, max_bounds.y)
 		next_global_position.z = clampf(next_global_position.z, min_bounds.z, max_bounds.z)
 	else:
 		next_global_position.x = _wrap_axis(next_global_position.x, min_bounds.x, max_bounds.x)
-		next_global_position.y = _wrap_axis(next_global_position.y, min_bounds.y, max_bounds.y)
+		if wrap_vertical:
+			next_global_position.y = _wrap_axis(next_global_position.y, min_bounds.y, max_bounds.y)
 		next_global_position.z = _wrap_axis(next_global_position.z, min_bounds.z, max_bounds.z)
 
 	target.global_position = next_global_position
 	return camera
+
+func bounce_vertical(target: Node3D, camera: Camera3D, viewport: Viewport, bounds_mode: int, velocity: Vector3) -> Vector3:
+	if camera == null and viewport != null:
+		camera = viewport.get_camera_3d()
+	if camera == null or not target is MeshInstance3D:
+		if not _warned_portrait_bounds:
+			push_warning("[wrap] Portrait vertical walls require a camera and a mesh")
+			_warned_portrait_bounds = true
+		return velocity
+
+	var reference := camera.global_transform
+	var tangent := 0.0
+	var half_height := 0.0
+	if bounds_mode == BoundsMode.WRAP_SHARED_SCREEN and _vertical_tangent > 0.0:
+		reference = _reference_transform
+		tangent = _vertical_tangent
+	elif camera.projection == Camera3D.PROJECTION_PERSPECTIVE:
+		tangent = WallGeometryCalculatorScript.frustum_size_at_distance(camera, 1.0).y
+	else:
+		half_height = WallGeometryCalculatorScript.frustum_size_at_distance(camera, 1.0).y
+	var inverse := reference.affine_inverse()
+	var center := inverse * target.global_position
+	var distance := -center.z
+	if tangent > 0.0:
+		half_height = tangent * distance
+	var basis := inverse.basis * target.global_basis
+	var mesh := target as MeshInstance3D
+	var aabb := mesh.get_aabb()
+	var max_top := -INF
+	var min_bottom := INF
+	for i in 8:
+		var offset := basis * aabb.get_endpoint(i)
+		max_top = maxf(max_top, offset.y + tangent * offset.z)
+		min_bottom = minf(min_bottom, offset.y - tangent * offset.z)
+	var top := half_height - max_top
+	var bottom := -half_height - min_bottom
+	if bottom > top:
+		if not _warned_portrait_bounds:
+			push_warning("[wrap] Portrait is taller than the viewport; it cannot fit between vertical walls")
+			_warned_portrait_bounds = true
+		center.y = (top + bottom) * 0.5
+		target.global_position = reference * center
+		return velocity
+	var view_velocity := inverse.basis * velocity
+	if center.y > top:
+		center.y = top
+		if view_velocity.y > 0.0:
+			view_velocity.y = -view_velocity.y
+	elif center.y < bottom:
+		center.y = bottom
+		if view_velocity.y < 0.0:
+			view_velocity.y = -view_velocity.y
+	target.global_position = reference * center
+	return reference.basis * view_velocity
 
 func _wrap_axis(value: float, min_value: float, max_value: float) -> float:
 	if value > max_value:

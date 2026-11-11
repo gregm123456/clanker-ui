@@ -139,7 +139,7 @@ Select `SpinningCube` and set these exported properties:
 
 | Property | Type and units | Meaning |
 | --- | --- | --- |
-| `floating_portrait` | Boolean | Uses a gentle upright wobble and a 6-second near-view hold, followed by a 1.5-second retreat and 1.5-second return. The image fades at depth; its X/Y velocity remains active. Enabled in the default scene. |
+| `floating_portrait` | Boolean | Uses a gentle upright wobble, a 6-second near-view hold, a 1.5-second retreat and a 1-second fade-in at the front. X/Y drift remains active, with bounces at the top and bottom of the view. Enabled in the default scene. |
 | `tumble_speed` | `Vector3`, radians/second | Continuous rotation speed around X, Y, and Z. For example `(0, 1.0, 0)` rotates around Y only. A negative value reverses that axis. |
 | `move_velocity` | `Vector3`, world units/second | Initial movement velocity on X, Y, and Z. For example `(0.5, 1.0, 0)` moves right and up without moving toward or away from the camera. |
 | `move_acceleration` | `Vector3`, world units/second squared | Added to velocity every update. Use `(0, 0, 0)` for constant velocity. |
@@ -160,10 +160,13 @@ With `floating_portrait` disabled, the runtime applies movement each update in t
 
 With it enabled, wobble is bounded relative to the starting rotation, depth is
 controlled by the portrait cycle, and only the X/Y components of `move_velocity`
-are used. `tumble_speed` and `move_acceleration` do not apply. Both local and
-remote objects fade based on their shared world depth. The depth cycle travels
-10 world units behind the starting position, so any 3D depth bounds must include
-that range. Disable `floating_portrait` to retain the original tumbling motion.
+are used. `tumble_speed` and `move_acceleration` do not apply. With bounds enabled,
+the whole portrait bounces off the vertical edges of the shared view while its
+horizontal wrapping remains unchanged. It retreats up to 60 world units (limited
+by configured 3D volume bounds; shared-screen bounds expand to accommodate it),
+fades out near the end, and reappears near the starting
+depth. Opacity is synchronized with remote objects. Disable `floating_portrait`
+to retain the original tumbling motion.
 
 The object starts with the Position and Rotation values saved in the scene, then movement
 changes its transform while the application runs. The current `spinning_cube.gd` also
@@ -427,7 +430,8 @@ remote objects; Phase 4 owns that scene behavior.
 The envelope is the stable interoperability boundary for future clients: `sender_peer_id` is
 the process identity, while `payload.object_id` identifies a shared object. A `spawn` payload
 must contain the object descriptor and its `object_id`; a `transform` payload uses the existing
-`TransformSyncSchema`; a `calibration` payload uses `MeshCalibrationModel.to_dictionary()`;
+`TransformSyncSchema`, with optional `opacity` defaulting to 1 for older senders. Both peers
+must support opacity for synchronized portrait re-entry; a `calibration` payload uses `MeshCalibrationModel.to_dictionary()`;
 `despawn` contains only `object_id`; and `heartbeat` may use an empty object. Senders should use
 the same `udp_port` for broadcast and configured unicast destinations. The `[peers]` port is the
 UDP destination port; snapshot requests always use the remote node's `snapshot_tcp_port`.

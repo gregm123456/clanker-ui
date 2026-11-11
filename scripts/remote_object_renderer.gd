@@ -48,10 +48,7 @@ func process(_delta: float) -> void:
 		if instance == null or _camera == null:
 			continue
 		var currently_visible := _is_object_visible_to_camera(instance.global_position)
-		var descriptor: Dictionary = state.get("descriptor", {})
-		var render_config: Dictionary = descriptor.get("render_config", {})
-		if bool(render_config.get("portrait_depth_fade", false)):
-			currently_visible = currently_visible and instance.global_position.z > float(render_config.get("portrait_origin_z", 0.0)) - 9.0
+		currently_visible = currently_visible and float(state.get("opacity", 1.0)) > 0.01
 		var was_visible := bool(state.get("is_visible", false))
 		state["is_visible"] = currently_visible
 		if not was_visible and currently_visible:
@@ -138,6 +135,10 @@ func _apply_transform(object_id: String, transform_state: Dictionary) -> void:
 	var position: Vector3 = transform_state.get("position", instance.global_position)
 	var rotation: Quaternion = transform_state.get("rotation", Quaternion.IDENTITY)
 	instance.global_transform = Transform3D(Basis(rotation), position)
+	var opacity := float(transform_state.get("opacity", 1.0))
+	state["opacity"] = opacity
+	if instance.material_override is ShaderMaterial:
+		(instance.material_override as ShaderMaterial).set_shader_parameter("portrait_opacity", opacity)
 
 func _on_shared_object_despawned(object_id: String) -> void:
 	if object_id.is_empty() or object_id == _local_object_id:

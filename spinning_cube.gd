@@ -177,7 +177,9 @@ func _process(delta: float) -> void:
 		_camera_source.process(delta)
 	if not use_fixed_step_movement:
 		camera = _movement_controller.process_transform(self, delta, camera, get_viewport())
-	_mesh_sync_controller.process_transform(self)
+	if _mat != null and floating_portrait:
+		_mat.set_shader_parameter("portrait_opacity", _movement_controller.portrait_opacity)
+	_mesh_sync_controller.process_transform(self, _movement_controller.portrait_opacity)
 	if _remote_object_renderer != null:
 		_remote_object_renderer.process(delta)
 
@@ -242,6 +244,11 @@ func _apply_runtime_configuration() -> void:
 				var shared_bounds := WallGeometryCalculatorScript.compute_wall_world_bounds(wall_layout, 2.0 * half_width / total_width_mm)
 				installation_geometry.world_bounds_center = shared_bounds["center"]
 				installation_geometry.world_bounds_half_extents = shared_bounds["half_extents"]
+				if floating_portrait:
+					installation_geometry.world_bounds_half_extents.z = maxf(
+						installation_geometry.world_bounds_half_extents.z,
+						absf(global_position.z - installation_geometry.world_bounds_center.z) + SpinningCubeMovementControllerScript.PORTRAIT_EXIT_DISTANCE
+					)
 				bounds_volume_center = installation_geometry.world_bounds_center
 				bounds_volume_half_extents = installation_geometry.world_bounds_half_extents
 				bounds_mode = 3

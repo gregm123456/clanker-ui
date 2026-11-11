@@ -23,6 +23,7 @@ uniform float metallic : hint_range(0.0, 1.0) = 0.15;
 uniform vec3 cube_size = vec3(1.8, 1.8, 1.8);
 uniform bool portrait_depth_fade = false;
 uniform float portrait_origin_z = 0.0;
+uniform float portrait_opacity = 1.0;
 
 varying vec3 v_local_pos;
 varying float v_object_z;
@@ -149,5 +150,5 @@ void fragment() {
 	ALBEDO = base_color;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
-	ALPHA = portrait_depth_fade ? smoothstep(portrait_origin_z - 9.0, portrait_origin_z - 5.0, v_object_z) : 1.0;
+	ALPHA = portrait_depth_fade ? portrait_opacity * smoothstep(portrait_origin_z - 60.0, portrait_origin_z - 57.0, v_object_z) : 1.0;
 }

@@ -64,12 +64,13 @@ func handle_viewport_size_changed(viewport: Viewport) -> void:
 	_viewport = viewport
 	_publish_calibration()
 
-func process_transform(target: MeshInstance3D) -> void:
+func process_transform(target: MeshInstance3D, opacity: float = 1.0) -> void:
 	_target = target
 	if not enabled or _target == null:
 		return
 
 	var payload := _transform_schema.serialize_transform(shared_object_id, mesh_peer_id, _target.global_transform)
+	payload["opacity"] = opacity
 	_mesh_sync_service.publish_object_transform(shared_object_id, payload)
 	if _network_bridge != null:
 		_network_bridge.send_object_transform(payload)

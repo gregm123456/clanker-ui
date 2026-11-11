@@ -13,6 +13,7 @@ var bounds_behavior: int = SpinningCubeBoundsStrategy.BoundsBehavior.WRAP
 var bounds_volume_center: Vector3 = Vector3.ZERO
 var bounds_volume_half_extents: Vector3 = Vector3(8.0, 4.5, 4.0)
 var floating_portrait: bool = false
+var portrait_opacity: float = 1.0
 
 var _bounds_strategy := SpinningCubeBoundsStrategyScript.new()
 var _portrait_elapsed := 0.0
@@ -22,7 +23,8 @@ var _portrait_phase := 0.0
 
 const PORTRAIT_HOLD_SECONDS := 6.0
 const PORTRAIT_TRAVEL_SECONDS := 1.5
-const PORTRAIT_EXIT_DISTANCE := 10.0
+const PORTRAIT_ENTRY_SECONDS := 1.0
+const PORTRAIT_EXIT_DISTANCE := 60.0
 
 func initialize_portrait(target: Node3D) -> void:
 	_portrait_origin_z = target.global_position.z
@@ -62,7 +64,7 @@ func process_transform(target: Node3D, delta: float, camera: Camera3D, viewport:
 		target.position += move_velocity * delta
 
 	if enable_wraparound:
-		return _bounds_strategy.apply_bounds(
+		camera = _bounds_strategy.apply_bounds(
 			target,
 			camera,
 			viewport,
@@ -71,13 +73,16 @@ func process_transform(target: Node3D, delta: float, camera: Camera3D, viewport:
 			bounds_behavior,
 			bounds_volume_center,
 			bounds_volume_half_extents,
-			move_velocity
+			move_velocity,
+			not floating_portrait
 		)
+		if floating_portrait:
+			move_velocity = _bounds_strategy.bounce_vertical(target, camera, viewport, bounds_mode, move_velocity)
 
 	return camera
 
 func _process_portrait(target: Node3D, delta: float) -> void:
-	var cycle_duration := PORTRAIT_HOLD_SECONDS + 2.0 * PORTRAIT_TRAVEL_SECONDS
+	var cycle_duration := PORTRAIT_HOLD_SECONDS + PORTRAIT_TRAVEL_SECONDS + PORTRAIT_ENTRY_SECONDS
 	_portrait_elapsed += delta
 	var cycle_time := fposmod(_portrait_elapsed, cycle_duration)
 	var wobble_time := _portrait_elapsed + _portrait_phase
@@ -87,21 +92,26 @@ func _process_portrait(target: Node3D, delta: float) -> void:
 		deg_to_rad(5.0) * sin(wobble_time * TAU / 7.0 + _portrait_phase)
 	)
 	var depth_fraction := 0.0
+	portrait_opacity = 1.0
 	if cycle_time >= PORTRAIT_HOLD_SECONDS:
 		if cycle_time < PORTRAIT_HOLD_SECONDS + PORTRAIT_TRAVEL_SECONDS:
 			var progress := (cycle_time - PORTRAIT_HOLD_SECONDS) / PORTRAIT_TRAVEL_SECONDS
 			depth_fraction = progress * progress
+			portrait_opacity = 1.0 - smoothstep(0.94, 1.0, progress)
 		else:
-			var progress := (cycle_time - PORTRAIT_HOLD_SECONDS - PORTRAIT_TRAVEL_SECONDS) / PORTRAIT_TRAVEL_SECONDS
-			depth_fraction = (1.0 - progress) * (1.0 - progress)
+			var progress := (cycle_time - PORTRAIT_HOLD_SECONDS - PORTRAIT_TRAVEL_SECONDS) / PORTRAIT_ENTRY_SECONDS
+			portrait_opacity = smoothstep(0.0, 1.0, progress)
 	target.position += Vector3(move_velocity.x, move_velocity.y, 0.0) * delta
 	var world_position := target.global_position
-	world_position.z = _portrait_origin_z - PORTRAIT_EXIT_DISTANCE * depth_fraction
+	var exit_distance := PORTRAIT_EXIT_DISTANCE
+	if enable_wraparound and bounds_mode in [SpinningCubeBoundsStrategy.BoundsMode.BOUNDS_3D_VOLUME, SpinningCubeBoundsStrategy.BoundsMode.WRAP_SHARED_SCREEN]:
+		exit_distance = minf(exit_distance, maxf(0.0, _portrait_origin_z - (bounds_volume_center.z - bounds_volume_half_extents.z)))
+	world_position.z = _portrait_origin_z - exit_distance * depth_fraction
 	target.global_position = world_position
 
 func handle_viewport_size_changed(target: Node3D, camera: Camera3D, viewport: Viewport) -> Camera3D:
 	if enable_wraparound:
-		return _bounds_strategy.apply_bounds(
+		camera = _bounds_strategy.apply_bounds(
 			target,
 			camera,
 			viewport,
@@ -110,7 +120,10 @@ func handle_viewport_size_changed(target: Node3D, camera: Camera3D, viewport: Vi
 			bounds_behavior,
 			bounds_volume_center,
 			bounds_volume_half_extents,
-			move_velocity
+			move_velocity,
+			not floating_portrait
 		)
+		if floating_portrait:
+			move_velocity = _bounds_strategy.bounce_vertical(target, camera, viewport, bounds_mode, move_velocity)
 
 	return camera
