@@ -22,10 +22,6 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=6
 
-[input_devices]
-
-pointing/emulate_mouse_from_touch=true
-
 [physics]
 
 3d/physics_engine="Jolt Physics"
