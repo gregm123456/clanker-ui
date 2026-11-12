@@ -106,7 +106,7 @@ func get_face_settings() -> Dictionary:
 	return {
 		"service_url": _get_string("faces", "service_url", "http://pi5ai2sd:5002/v1/attributes"),
 		"service_urls": _get_urls("faces", "service_urls"),
-		"max_portraits": int(_get_number("faces", "max_portraits", 10)),
+		"max_portraits": int(_get_number("faces", "max_portraits", 4)),
 	}
 
 func get_speech_settings() -> Dictionary:
@@ -204,7 +204,7 @@ flip_webcam_horizontal = true
 [faces]
 service_url = "http://pi5ai2sd:5002/v1/attributes"
 ; service_urls = ["http://pi5ai2sd.tail123.ts.net:5002/v1/attributes", "http://pi5ai2sd.local:5002/v1/attributes", "http://192.168.77.1:5002/v1/attributes"]
-max_portraits = 10
+max_portraits = 4
 
 [speech]
 interrogation_url = "http://m5image:5000"

@@ -4,7 +4,7 @@ extends CanvasLayer
 const JIGGLE_PIXELS := 10.0
 const PORTRAIT_SCALE := 1.5
 
-var max_portraits: int = 10
+var max_portraits: int = 4
 var _root: Control
 var _portraits: Array = []
 var _elapsed := 0.0

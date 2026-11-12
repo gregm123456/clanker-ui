@@ -29,7 +29,7 @@ func _ready() -> void:
 	var max_portraits := int(config.get_face_settings()["max_portraits"])
 	if max_portraits < 1:
 		push_warning("[face] Invalid portrait limit; using 10")
-		max_portraits = 10
+		max_portraits = 4
 	_face_overlay.max_portraits = max_portraits
 	add_child(_face_overlay)
 	var display: Dictionary = config.get_display_settings()
