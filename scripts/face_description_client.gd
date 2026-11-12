@@ -5,6 +5,7 @@ signal description_ready(text: String, token: int)
 const Categories = preload("res://config/face_categories.gd")
 const MAX_RESPONSE_BYTES := 2 * 1024 * 1024
 const TIMEOUT_SEC := 30.0
+const HttpPathSelector = preload("res://scripts/http_path_selector.gd")
 
 var service_url := "http://m5image:5000"
 var flat_interrogation_enabled := false
@@ -14,6 +15,14 @@ var _generation := 0
 var _token := 0
 var _image_base64 := ""
 var _structured := ""
+var _path_selector
+
+func configure_paths(urls: Variant) -> void:
+	if urls == null:
+		return
+	_path_selector = HttpPathSelector.new()
+	add_child(_path_selector)
+	_path_selector.configure(urls)
 
 func describe(image: Image, token: int) -> void:
 	cancel()
@@ -65,6 +74,11 @@ func _categories_valid() -> bool:
 	return true
 
 func _start_http(stage: String) -> void:
+	var base_url := service_url if _path_selector == null else String(_path_selector.selected_url())
+	if base_url.is_empty():
+		push_warning("[speech] No reachable interrogation service path")
+		_complete_step(stage, {})
+		return
 	var path := "/sdapi/v1/interrogate/structured" if stage == "structured" else "/sdapi/v1/interrogate"
 	var payload := {"image": _image_base64}
 	if stage == "structured":
@@ -75,21 +89,23 @@ func _start_http(stage: String) -> void:
 	request.body_size_limit = MAX_RESPONSE_BYTES
 	add_child(request)
 	_request = request
-	request.request_completed.connect(_on_http_completed.bind(request, stage, _generation))
-	var error := request.request(service_url.trim_suffix("/") + path, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(payload))
+	request.request_completed.connect(_on_http_completed.bind(request, stage, _generation, base_url))
+	var error := request.request(base_url.trim_suffix("/") + path, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(payload))
 	if error != OK:
 		push_warning("[speech] Could not start %s interrogation (error=%s)" % [stage, error])
 		_request = null
 		request.queue_free()
 		_complete_step(stage, {})
 
-func _on_http_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest, stage: String, generation: int) -> void:
+func _on_http_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest, stage: String, generation: int, url: String = "") -> void:
 	if generation != _generation:
 		return
 	_request = null
 	request.queue_free()
 	var response := {}
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		if _path_selector != null and result in [HTTPRequest.RESULT_CANT_RESOLVE, HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CONNECTION_ERROR]:
+			_path_selector.report_connection_failure(url)
 		push_warning("[speech] %s interrogation failed (result=%s, HTTP=%s)" % [stage, result, code])
 	else:
 		var json := JSON.new()

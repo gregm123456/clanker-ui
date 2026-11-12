@@ -11,10 +11,12 @@ const REQUEST_TIMEOUT_SEC: float = 5.0
 var _address_book
 var _snapshot_port: int = 9010
 var _requests: Dictionary = {}
+var _path_selectors: Dictionary = {}
 
-func configure(address_book, snapshot_port: int) -> Error:
+func configure(address_book, snapshot_port: int, path_selectors: Dictionary = {}) -> Error:
 	_address_book = address_book
 	_snapshot_port = snapshot_port
+	_path_selectors = path_selectors
 	if _snapshot_port <= 0 or _snapshot_port > 65535:
 		return ERR_INVALID_PARAMETER
 	return OK
@@ -26,19 +28,23 @@ func request_snapshot(object_id: String, owner_peer_id: String) -> Error:
 		return ERR_BUSY
 	if _address_book == null:
 		return ERR_UNCONFIGURED
-	var peer_address: Dictionary = _address_book.resolve_peer(owner_peer_id)
-	if peer_address.is_empty():
+	var selector = _path_selectors.get(owner_peer_id)
+	var peer_address: Dictionary = _address_book.resolve_peer(owner_peer_id) if selector == null else {"address": selector.selected_address()}
+	if peer_address.is_empty() or String(peer_address.get("address", "")).is_empty():
 		return ERR_CANT_RESOLVE
 	var stream := StreamPeerTCP.new()
 	var address := String(peer_address.get("address", ""))
 	var error: Error = stream.connect_to_host(address, _snapshot_port)
 	if error != OK:
+		if selector != null:
+			selector.report_connection_failure(selector.selected_url())
 		return _fail_immediately(object_id, owner_peer_id, "connect_to_host failed: %s" % error)
 	_requests[object_id] = {
 		"object_id": object_id,
 		"owner_peer_id": owner_peer_id,
 		"stream": stream,
 		"state": "connecting",
+		"path_url": "" if selector == null else selector.selected_url(),
 		"header": PackedByteArray(),
 		"body": PackedByteArray(),
 		"expected_bytes": -1,
@@ -56,11 +62,15 @@ func _process(delta: float) -> void:
 			continue
 		request["age"] = float(request.get("age", 0.0)) + delta
 		if float(request.get("age", 0.0)) > REQUEST_TIMEOUT_SEC:
+			if String(request.get("state")) == "connecting":
+				_report_connection_failure(request)
 			_fail_request(object_id, request, "snapshot request timed out")
 			continue
 		stream.poll()
 		var status := stream.get_status()
 		if status == StreamPeerTCP.STATUS_ERROR or status == StreamPeerTCP.STATUS_NONE:
+			if String(request.get("state")) == "connecting":
+				_report_connection_failure(request)
 			_fail_request(object_id, request, "TCP connection failed")
 			continue
 		if String(request.get("state", "")) == "connecting":
@@ -142,3 +152,8 @@ func _fail_request(object_id: String, request: Dictionary, reason: String) -> vo
 func _fail_immediately(object_id: String, owner_peer_id: String, reason: String) -> Error:
 	snapshot_failed.emit(object_id, owner_peer_id, reason)
 	return ERR_CANT_CONNECT
+
+func _report_connection_failure(request: Dictionary) -> void:
+	var selector = _path_selectors.get(String(request.get("owner_peer_id", "")))
+	if selector != null:
+		selector.report_connection_failure(String(request.get("path_url", "")))

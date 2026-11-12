@@ -64,10 +64,29 @@ func get_peers() -> Dictionary:
 	var section_keys := _config.get_section_keys("peers")
 	for key in section_keys:
 		var raw_value: Variant = _config.get_value("peers", key, "")
-		var peer_entry := _parse_peer_entry(String(raw_value))
-		if peer_entry.is_empty():
-			continue
-		peers[String(key)] = peer_entry
+		if typeof(raw_value) == TYPE_ARRAY or typeof(raw_value) == TYPE_PACKED_STRING_ARRAY:
+			var candidates: Array = []
+			for item in raw_value:
+				if typeof(item) != TYPE_STRING:
+					push_error("[installation_config] Peer %s has a non-string endpoint" % key)
+					candidates.clear()
+					break
+				var candidate := _parse_peer_entry(item)
+				if candidate.is_empty():
+					push_error("[installation_config] Invalid endpoint for peer %s: %s" % [key, item])
+					candidates.clear()
+					break
+				candidates.append(candidate)
+			if candidates.is_empty():
+				push_error("[installation_config] Peer %s has no valid endpoints" % key)
+			else:
+				peers[String(key)] = {"candidates": candidates}
+		else:
+			var peer_entry := _parse_peer_entry(String(raw_value))
+			if peer_entry.is_empty():
+				push_error("[installation_config] Invalid endpoint for peer %s" % key)
+			else:
+				peers[String(key)] = peer_entry
 	return peers
 
 func get_camera_settings() -> Dictionary:
@@ -86,6 +105,7 @@ func get_camera_settings() -> Dictionary:
 func get_face_settings() -> Dictionary:
 	return {
 		"service_url": _get_string("faces", "service_url", "http://pi5ai2sd:5002/v1/attributes"),
+		"service_urls": _get_urls("faces", "service_urls"),
 		"max_portraits": int(_get_number("faces", "max_portraits", 10)),
 	}
 
@@ -93,6 +113,8 @@ func get_speech_settings() -> Dictionary:
 	return {
 		"interrogation_url": _get_string("speech", "interrogation_url", "http://m5image:5000"),
 		"tts_url": _get_string("speech", "tts_url", "http://pi5ai2sd:5003/v1/audio/speech"),
+		"interrogation_urls": _get_urls("speech", "interrogation_urls"),
+		"tts_urls": _get_urls("speech", "tts_urls"),
 		"max_jobs": int(_get_number("speech", "max_jobs", 5)),
 		"flat_interrogation_enabled": _get_bool("speech", "flat_interrogation_enabled", false),
 	}
@@ -166,6 +188,7 @@ peer_timeout_sec = 15.0
 ; Example entries:
 ; pi_right = "192.168.1.42:9000"
 ; pi_office = "pi-office.tail123.ts.net:9000"
+; pi_remote = ["pi-remote.tail123.ts.net:9000", "pi-remote.local:9000", "192.168.77.46:9000"]
 
 [camera]
 feed_index = 0
@@ -180,11 +203,14 @@ flip_webcam_horizontal = true
 
 [faces]
 service_url = "http://pi5ai2sd:5002/v1/attributes"
+; service_urls = ["http://pi5ai2sd.tail123.ts.net:5002/v1/attributes", "http://pi5ai2sd.local:5002/v1/attributes", "http://192.168.77.1:5002/v1/attributes"]
 max_portraits = 10
 
 [speech]
 interrogation_url = "http://m5image:5000"
 tts_url = "http://pi5ai2sd:5003/v1/audio/speech"
+; interrogation_urls = ["http://m5image.tail123.ts.net:5000", "http://m5image.local:5000", "http://192.168.77.46:5000"]
+; tts_urls = ["http://pi5ai2sd.tail123.ts.net:5003/v1/audio/speech", "http://pi5ai2sd.local:5003/v1/audio/speech", "http://192.168.77.1:5003/v1/audio/speech"]
 max_jobs = 5
 flat_interrogation_enabled = false
 """.strip_edges()
@@ -194,6 +220,23 @@ func _get_string(section: String, key: String, default_value: String) -> String:
 	if value == null:
 		return default_value
 	return String(value)
+
+func _get_urls(section: String, key: String) -> Variant:
+	var urls: Array[String] = []
+	if not _config.has_section_key(section, key):
+		return null
+	var raw: Variant = _config.get_value(section, key)
+	if typeof(raw) != TYPE_ARRAY and typeof(raw) != TYPE_PACKED_STRING_ARRAY:
+		push_error("[installation_config] %s.%s must be an array of URLs" % [section, key])
+		return urls
+	for value in raw:
+		if typeof(value) != TYPE_STRING or not String(value).begins_with("http://") or String(value).trim_prefix("http://").get_slice("/", 0).is_empty():
+			push_error("[installation_config] Invalid HTTP URL in %s.%s" % [section, key])
+			return []
+		urls.append(value)
+	if urls.is_empty():
+		push_error("[installation_config] %s.%s must not be empty" % [section, key])
+	return urls
 
 func _get_number(section: String, key: String, default_value: float) -> float:
 	var value = _config.get_value(section, key, default_value)
@@ -216,11 +259,16 @@ func _parse_peer_entry(raw_value: String) -> Dictionary:
 	var host := normalized
 	var port := 9000
 	if normalized.count(":") > 0:
+		if normalized.count(":") != 1:
+			return {}
 		var split_index := normalized.rfind(":")
 		var maybe_port := normalized.substr(split_index + 1)
-		if maybe_port.is_valid_int():
-			host = normalized.substr(0, split_index)
-			port = int(maybe_port)
+		if not maybe_port.is_valid_int():
+			return {}
+		host = normalized.substr(0, split_index).strip_edges()
+		port = int(maybe_port)
+	if host.is_empty() or port < 1 or port > 65535:
+		return {}
 	return {
 		"host": host,
 		"port": port,

@@ -57,6 +57,8 @@ func _process(_delta: float) -> void:
 		return
 	while _socket.get_available_packet_count() > 0:
 		var packet := _socket.get_packet()
+		var source_address := _socket.get_packet_ip()
+		var source_port := _socket.get_packet_port()
 		var parsed: Variant = JSON.parse_string(packet.get_string_from_utf8())
 		if typeof(parsed) != TYPE_DICTIONARY:
 			print("[udp_mesh_transport] Dropped non-dictionary packet")
@@ -64,7 +66,31 @@ func _process(_delta: float) -> void:
 		var message: Dictionary = parsed
 		if not _is_valid_message(message):
 			continue
+		var payload: Dictionary = message["payload"]
+		if String(message["type"]) == "heartbeat" and payload.has("_path_probe"):
+			if String(payload.get("_path_target", "")) == _local_peer_id:
+				var response := {
+					"version": PROTOCOL_VERSION, "type": "heartbeat", "sender_peer_id": _local_peer_id,
+					"payload": {"_path_ack": String(payload["_path_probe"])}
+				}
+				var error := _send_packet(source_address, source_port, JSON.stringify(response).to_utf8_buffer())
+				if error != OK:
+					print("[udp_mesh_transport] Path acknowledgement failed (error=", error, ")")
+			continue
+		if String(message["type"]) == "heartbeat" and payload.has("_path_ack"):
+			if _address_book != null:
+				_address_book.acknowledge_path(String(message["sender_peer_id"]), source_address, source_port, String(payload["_path_ack"]), Time.get_ticks_usec())
+			continue
 		message_received.emit(message)
+	if _address_book != null and (_mode == "unicast" or _mode == "both"):
+		for probe in _address_book.path_probes(Time.get_ticks_usec()):
+			var envelope := {
+				"version": PROTOCOL_VERSION, "type": "heartbeat", "sender_peer_id": _local_peer_id,
+				"payload": {"_path_probe": probe["nonce"], "_path_target": probe["peer_id"]}
+			}
+			var error := _send_packet(String(probe["address"]), int(probe["port"]), JSON.stringify(envelope).to_utf8_buffer())
+			if error != OK:
+				print("[udp_mesh_transport] Path probe failed for ", probe["peer_id"], " (error=", error, ")")
 
 func send(message_type: String, payload: Dictionary) -> Error:
 	if not _bound:
@@ -99,6 +125,8 @@ func close() -> void:
 	if _bound:
 		_socket.close()
 		_bound = false
+		if _address_book != null:
+			_address_book.invalidate()
 
 func _send_packet(address: String, port: int, packet: PackedByteArray) -> Error:
 	if address.is_empty() or port <= 0 or port > 65535:

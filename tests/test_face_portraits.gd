@@ -23,6 +23,12 @@ class FaceStub extends RefCounted:
 		orders.append(order)
 		return OK
 
+class PathStub extends RefCounted:
+	var failures: Array = []
+
+	func report_connection_failure(url: String) -> void:
+		failures.append(url)
+
 var failures := 0
 
 func _initialize() -> void:
@@ -39,6 +45,7 @@ func _run_tests() -> void:
 	_test_mesh_cycle_flow()
 	_test_face_parsing()
 	_test_face_errors()
+	_test_face_path_failures()
 	_test_remote_snapshot_freshness()
 	await _test_overlay()
 	if failures == 0:
@@ -167,6 +174,24 @@ func _test_face_errors() -> void:
 	client._active_requests = FaceClient.MAX_ACTIVE_REQUESTS
 	_check(client.submit(PackedByteArray([0xff, 0xd8, 0xff]), 3) == ERR_BUSY, "Request limit was not enforced")
 	client._active_requests = 0
+	client.queue_free()
+
+func _test_face_path_failures() -> void:
+	var client = FaceClient.new()
+	root.add_child(client)
+	var paths := PathStub.new()
+	client._path_selector = paths
+	var responses := [0]
+	client.faces_received.connect(func(_faces, _order): responses[0] += 1)
+	client._active_requests = 1
+	client._on_request_completed(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray(), HTTPRequest.new(), 1, "http://preferred")
+	_check(paths.failures == ["http://preferred"], "Connection failure did not invalidate its path")
+	client._active_requests = 1
+	client._on_request_completed(HTTPRequest.RESULT_TIMEOUT, 0, PackedStringArray(), PackedByteArray(), HTTPRequest.new(), 2, "http://preferred")
+	client._active_requests = 1
+	client._on_request_completed(HTTPRequest.RESULT_SUCCESS, 503, PackedStringArray(), PackedByteArray(), HTTPRequest.new(), 3, "http://preferred")
+	_check(paths.failures.size() == 1, "Inference timeout or HTTP service error incorrectly invalidated the path")
+	_check(responses[0] == 0 and client._active_requests == 0, "Failed face POST was retried or produced results")
 	client.queue_free()
 
 func _test_remote_snapshot_freshness() -> void:

@@ -4,6 +4,7 @@ const DescriptionClient = preload("res://scripts/face_description_client.gd")
 const MAX_AUDIO_BYTES := 20 * 1024 * 1024
 const MAX_TEXT_LENGTH := 5000
 const TIMEOUT_SEC := 30.0
+const HttpPathSelector = preload("res://scripts/http_path_selector.gd")
 
 var tts_url := "http://pi5ai2sd:5003/v1/audio/speech"
 var max_jobs := 5
@@ -15,6 +16,9 @@ var _generation := 0
 var _description_client
 var _request: HTTPRequest
 var _player: AudioStreamPlayer
+var _tts_paths: Variant
+var _interrogation_paths: Variant
+var _tts_selector
 
 static func install(parent: Node, overlay, settings: Dictionary) -> Node:
 	var coordinator := preload("res://scripts/face_speech_coordinator.gd").new()
@@ -23,6 +27,8 @@ static func install(parent: Node, overlay, settings: Dictionary) -> Node:
 	coordinator.max_jobs = int(settings["max_jobs"])
 	coordinator._description_client = DescriptionClient.new()
 	coordinator._description_client.service_url = String(settings["interrogation_url"])
+	coordinator._tts_paths = settings.get("tts_urls")
+	coordinator._interrogation_paths = settings.get("interrogation_urls")
 	coordinator._description_client.flat_interrogation_enabled = bool(settings["flat_interrogation_enabled"])
 	overlay.speech_toggled.connect(coordinator.set_enabled)
 	parent.add_child(coordinator)
@@ -35,6 +41,12 @@ func _ready() -> void:
 	if _description_client == null:
 		_description_client = DescriptionClient.new()
 	add_child(_description_client)
+	if _description_client.has_method("configure_paths"):
+		_description_client.configure_paths(_interrogation_paths)
+	if _tts_paths != null:
+		_tts_selector = HttpPathSelector.new()
+		add_child(_tts_selector)
+		_tts_selector.configure(_tts_paths)
 	_description_client.description_ready.connect(_on_description_ready)
 	_player = AudioStreamPlayer.new()
 	add_child(_player)
@@ -96,26 +108,33 @@ func _on_description_ready(text: String, token: int) -> void:
 	_start_tts(text, token)
 
 func _start_tts(text: String, token: int) -> void:
+	var url := tts_url if _tts_selector == null else String(_tts_selector.selected_url())
+	if url.is_empty():
+		push_warning("[speech] No reachable Piper service path")
+		_finish_job()
+		return
 	var request := HTTPRequest.new()
 	request.use_threads = true
 	request.timeout = TIMEOUT_SEC
 	request.body_size_limit = MAX_AUDIO_BYTES
 	add_child(request)
 	_request = request
-	request.request_completed.connect(_on_tts_completed.bind(request, token))
-	var error := request.request(tts_url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify({"input": text}))
+	request.request_completed.connect(_on_tts_completed.bind(request, token, url))
+	var error := request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify({"input": text}))
 	if error != OK:
 		push_warning("[speech] Could not start Piper request (error=%s)" % error)
 		_request = null
 		request.queue_free()
 		_finish_job()
 
-func _on_tts_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest, token: int) -> void:
+func _on_tts_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest, token: int, url: String = "") -> void:
 	if token != _generation or not enabled or not _busy:
 		return
 	_request = null
 	request.queue_free()
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		if _tts_selector != null and result in [HTTPRequest.RESULT_CANT_RESOLVE, HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CONNECTION_ERROR]:
+			_tts_selector.report_connection_failure(url)
 		push_warning("[speech] Piper request failed (result=%s, HTTP=%s)" % [result, code])
 		_finish_job()
 		return

@@ -7,10 +7,19 @@ const MAX_ACTIVE_REQUESTS := 4
 const MAX_RESPONSE_BYTES := 20 * 1024 * 1024
 const REQUEST_TIMEOUT_SEC := 20.0
 const JPEG_PREFIX := "data:image/jpeg;base64,"
+const HttpPathSelector = preload("res://scripts/http_path_selector.gd")
 
 var service_url := "http://pi5ai2sd:5002/v1/attributes"
 var _active_requests := 0
 var _encodings: Array = []
+var _path_selector
+
+func configure_paths(urls: Variant) -> void:
+	if urls == null:
+		return
+	_path_selector = HttpPathSelector.new()
+	add_child(_path_selector)
+	_path_selector.configure(urls)
 
 func submit_image(image: Image, capture_order: int) -> Error:
 	if image == null or image.is_empty():
@@ -53,14 +62,18 @@ func submit(jpeg: PackedByteArray, capture_order: int) -> Error:
 	if _active_requests + _encodings.size() >= MAX_ACTIVE_REQUESTS:
 		push_warning("[face] Skipping cycle: face request capacity exhausted")
 		return ERR_BUSY
+	var url := service_url if _path_selector == null else String(_path_selector.selected_url())
+	if url.is_empty():
+		push_warning("[face] No reachable face service path; skipping frame")
+		return ERR_CANT_CONNECT
 	var request := HTTPRequest.new()
 	request.use_threads = true
 	request.timeout = REQUEST_TIMEOUT_SEC
 	request.body_size_limit = MAX_RESPONSE_BYTES
 	add_child(request)
-	request.request_completed.connect(_on_request_completed.bind(request, capture_order))
+	request.request_completed.connect(_on_request_completed.bind(request, capture_order, url))
 	var body := JSON.stringify({"image": JPEG_PREFIX + Marshalls.raw_to_base64(jpeg)})
-	var error := request.request(service_url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, body)
+	var error := request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, body)
 	if error != OK:
 		push_warning("[face] Could not start face request (error=%s)" % error)
 		request.queue_free()
@@ -68,10 +81,12 @@ func submit(jpeg: PackedByteArray, capture_order: int) -> Error:
 	_active_requests += 1
 	return OK
 
-func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest, capture_order: int) -> void:
+func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest, capture_order: int, url: String = "") -> void:
 	_active_requests -= 1
 	request.queue_free()
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		if _path_selector != null and result in [HTTPRequest.RESULT_CANT_RESOLVE, HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CONNECTION_ERROR]:
+			_path_selector.report_connection_failure(url)
 		push_warning("[face] Face request failed (result=%s, HTTP=%s)" % [result, response_code])
 		return
 	var json := JSON.new()

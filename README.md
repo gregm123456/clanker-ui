@@ -285,6 +285,74 @@ The `[speech]` URLs select the image interrogation and Piper speech services;
 `max_jobs` limits outstanding descriptions, including the currently playing or
 processing face. Existing configs without this section use the defaults above.
 
+### Ordered network paths
+
+For a trusted Ethernet link, an installation can opt in to ordered endpoints:
+
+```ini
+[peers]
+m5image = ["m5image.tail123.ts.net:9000", "m5image.local:9000", "192.168.77.46:9000"]
+
+[faces]
+service_urls = ["http://pi5ai2sd.tail123.ts.net:5002/v1/attributes", "http://pi5ai2sd.local:5002/v1/attributes", "http://192.168.77.1:5002/v1/attributes"]
+
+[speech]
+interrogation_urls = ["http://m5image.tail123.ts.net:5000", "http://m5image.local:5000", "http://192.168.77.46:5000"]
+tts_urls = ["http://pi5ai2sd.tail123.ts.net:5003/v1/audio/speech", "http://pi5ai2sd.local:5003/v1/audio/speech", "http://192.168.77.1:5003/v1/audio/speech"]
+```
+
+Replace the example tailnet suffix and addresses with the installation's actual
+values. Use a reserved DHCP address, not an unreserved current lease. Omit the
+URL arrays to retain the corresponding single URL, including a local loopback
+service. Ordered URL lists support `http://` endpoints; they override the single
+URL, and an invalid or empty list disables that selector with an error.
+
+For ordered peers, unicast UDP probes require acknowledgements from the expected
+peer and source address. Both peers must run a version supporting probes before
+ordered peers can send application state. Older peers' normal messages remain
+readable, but a legacy peer cannot acknowledge a probe, so an unverified path
+is logged and retried rather than reported as confirmed. Single peer entries
+and broadcast mode retain their existing behavior.
+
+Each candidate gets up to three seconds for DNS and connection/probe. A working
+fallback remains selected until it fails; then selection starts again from the
+preferred endpoint. If all fail, selection repeats indefinitely with a short
+delay. Snapshots and each HTTP service select paths independently using TCP
+connection checks. A reachable TCP port does not guarantee a camera frame or a
+healthy AI model. Images whose HTTP POST outcome is uncertain are not resent;
+later requests can use a recovered path. A face or speech request may be dropped
+while no path is ready. Look for `[peer_address_book]` and `[http_path]` messages
+to diagnose the selected path and failures.
+
+The `.local` and Ethernet alternatives use unencrypted, unauthenticated UDP,
+snapshot TCP, and HTTP. Enable them only on a trusted network. Tailscale may
+keep an established direct link during an internet outage, but a cold offline
+boot and DHCP recovery require separate verification.
+
+For the current two-Pi installation, NetworkManager's shared `eth0` on
+`pi5ai2sd` uses `192.168.77.1/24` and launches dnsmasq with
+`/etc/NetworkManager/dnsmasq-shared.d` as its configuration directory.
+`clanker-m5image.conf` reserves `192.168.77.46` for m5image's Ethernet MAC
+`2c:cf:67:c6:44:0c`. The running dnsmasq must be restarted by reactivating the
+shared network or rebooting pi5ai2sd before a newly added reservation takes
+effect; merely adding the file does not reload it. Such a restart interrupts
+the Ethernet path and can interrupt remote access. Arrange physical access and
+confirm recovery before doing it. Check the current lease and daemon startup:
+
+```sh
+sudo cat /var/lib/NetworkManager/dnsmasq-eth0.leases
+ps -eo args | grep '[d]nsmasq'
+ip -4 addr show eth0
+```
+
+Before changing the shared DHCP configuration, check for conflicting leases
+and other files in that directory and run `dnsmasq --test` on the combined
+configuration. Rollback requires removing only the reservation file and
+reactivating the shared network, again with physical access available. Godot
+pack and configuration backups should also be retained before deployment so
+both clients can be restored together; an ordered peer requires updated code
+on its counterpart.
+
 ### One Pi driving two portrait displays
 
 The normal single-screen mode remains the default. To use one Pi for two adjacent

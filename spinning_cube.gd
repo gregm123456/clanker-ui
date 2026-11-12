@@ -15,6 +15,7 @@ const WebcamSnapshotServerScript = preload("res://scripts/webcam_snapshot_server
 const WebcamSnapshotClientScript = preload("res://scripts/webcam_snapshot_client.gd")
 const PeerAddressBookScript = preload("res://scripts/peer_address_book.gd")
 const FaceAttributeClientScript = preload("res://scripts/face_attribute_client.gd")
+const HttpPathSelectorScript = preload("res://scripts/http_path_selector.gd")
 
 ## Speed of 3D tumbling rotation around X, Y, and Z axes (in radians per second)
 @export var tumble_speed: Vector3 = Vector3(1.2, 1.8, 0.9)
@@ -122,6 +123,7 @@ func _ready() -> void:
 	_face_client = FaceAttributeClientScript.new()
 	_face_client.service_url = String(installation_config.get_face_settings()["service_url"])
 	add_child(_face_client)
+	_face_client.configure_paths(installation_config.get_face_settings()["service_urls"])
 	_face_client.faces_received.connect(_on_face_crops_received)
 	_movement_controller.portrait_reentered.connect(_on_local_portrait_reentered)
 	if floating_portrait:
@@ -376,15 +378,31 @@ func _configure_mesh_sync() -> void:
 			camera
 		)
 		_remote_object_renderer.portrait_cycle_observed.connect(_on_remote_portrait_cycle)
-		var snapshot_address_book = PeerAddressBookScript.new()
-		snapshot_address_book.configure(
-			installation_config.get_peers(),
-			int(installation_config.get_network_settings().get("udp_port", 9000))
-		)
+		var snapshot_address_book
+		if _mesh_network_bridge != null:
+			snapshot_address_book = _mesh_network_bridge.get_address_book()
+		else:
+			snapshot_address_book = PeerAddressBookScript.new()
+			snapshot_address_book.configure(
+				installation_config.get_peers(),
+				int(installation_config.get_network_settings().get("udp_port", 9000))
+			)
 		_webcam_snapshot_client = WebcamSnapshotClientScript.new()
 		add_child(_webcam_snapshot_client)
 		var snapshot_port := int(installation_config.get_network_settings().get("snapshot_tcp_port", 9010))
-		var snapshot_client_error: Error = _webcam_snapshot_client.configure(snapshot_address_book, snapshot_port)
+		var snapshot_paths := {}
+		for peer_id in installation_config.get_peers():
+			var peer: Dictionary = installation_config.get_peers()[peer_id]
+			if not peer.has("candidates"):
+				continue
+			var urls: Array[String] = []
+			for candidate in peer["candidates"]:
+				urls.append("http://%s:%d" % [candidate["host"], snapshot_port])
+			var selector = HttpPathSelectorScript.new()
+			add_child(selector)
+			selector.configure(urls)
+			snapshot_paths[peer_id] = selector
+		var snapshot_client_error: Error = _webcam_snapshot_client.configure(snapshot_address_book, snapshot_port, snapshot_paths)
 		if snapshot_client_error != OK:
 			print("[spinning_cube] Snapshot client disabled after setup error: ", snapshot_client_error)
 			_webcam_snapshot_client.queue_free()
@@ -396,7 +414,7 @@ func _configure_mesh_sync() -> void:
 
 		_face_snapshot_client = WebcamSnapshotClientScript.new()
 		add_child(_face_snapshot_client)
-		var face_snapshot_error: Error = _face_snapshot_client.configure(snapshot_address_book, snapshot_port)
+		var face_snapshot_error: Error = _face_snapshot_client.configure(snapshot_address_book, snapshot_port, snapshot_paths)
 		if face_snapshot_error != OK:
 			push_warning("[face] Remote snapshot client disabled (error=%s)" % face_snapshot_error)
 			_face_snapshot_client.queue_free()
