@@ -538,11 +538,12 @@ until all accepted jobs drain, then later arrivals can be accepted again. Change
 `speech.max_jobs` in `user://installation.cfg` to use another positive limit.
 Failures and dropped jobs are logged without logging images, descriptions or audio.
 
-Edit `config/face_categories.gd` to change the five form-style category lists before
-building the app. These are deliberately fallible classifier guesses for the art
-installation, not verified demographics or identities. The structured service is
-forced to choose from the supplied options; its scores are relative to that list
-and cannot establish a person's gender, ethnicity, race, nationality or age.
+Edit `config/face_categories.gd` to change the four form-style category lists before
+building the app. These are deliberately fallible, playful classifier guesses for
+the art installation, not verified preferences or traits. The structured service
+is forced to choose from the supplied options; its scores are relative to that list
+and cannot establish a person's favorite food, personality, handedness or pet
+preference.
 The camera crop and description are sent over HTTP to the configured services; use
 only trusted endpoints and a trusted network. Neither crops nor audio are written to
 disk by the speech client.
@@ -603,6 +604,10 @@ There are two parts to a full Raspberry Pi deployment:
 2. Build the native CSI camera extension (`libcsi_camera.linux.arm64.so`) — only required if
    you want to use a Raspberry Pi CSI/ribbon-cable camera (e.g. Arducam, Camera Module 3).
    Skip this section entirely if you're only using a USB webcam.
+
+> **Redeploying code changes to the running Pis?** See the agent skill at
+> [`.github/skills/redeploy-pi-clients/SKILL.md`](.github/skills/redeploy-pi-clients/SKILL.md)
+> (export the `.pck`, copy it over, restart the `clankerui` user service).
 
 ### 1. Export the Godot project
 
